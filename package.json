@@ -1,0 +1,19 @@
+{
+  "name": "@zerberus/orcheval",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Policy-driven framework for evaluating orchestration runtimes using reproducible workloads and mandatory security gates.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test",
+    "lint": "echo 'No lint configuration configured yet.' && exit 0",
+    "eval:local": "echo 'Local evaluation placeholder for Phase 1 scaffolding.'"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}

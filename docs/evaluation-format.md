@@ -17,3 +17,7 @@ The Phase 1 CLI supports `version`, `evaluation.name`, `profile.id`, `targets`,
 metrics. `orcheval run evaluation.yaml` writes a directory containing the resolved
 configuration, environment, raw observations, trace events, gates, metrics,
 comparison and Markdown report.
+
+Run `orcheval doctor [target]` before a live evaluation to inspect a target's mode,
+version, capabilities and health. A `SIMULATED` result confirms that no live runner
+has been configured and cannot be used for vendor validation.

@@ -73,7 +73,7 @@ export function parseSimpleYamlConfig(content: string): EvaluationConfig {
   return config;
 }
 
-function usage(): string { return 'Usage: orcheval <init [evaluation.yaml]|list <targets|profiles>|validate <evaluation.yaml>|run <evaluation.yaml> [--output <directory>]|report <result-directory>>'; }
+function usage(): string { return 'Usage: orcheval <init [evaluation.yaml]|list <targets|profiles>|doctor [target]|validate <evaluation.yaml>|run <evaluation.yaml> [--output <directory>]|report <result-directory>>'; }
 
 export async function runCli(args: string[]): Promise<void> {
   const [command, ...rest] = args;
@@ -89,6 +89,18 @@ export async function runCli(args: string[]): Promise<void> {
     if (rest[0] === 'targets') console.log(JSON.stringify(phaseOneDependencies.targets.map((target) => target.id), null, 2));
     else if (rest[0] === 'profiles') console.log(JSON.stringify(phaseOneDependencies.profiles.map((profile) => profile.id), null, 2));
     else console.log('Usage: orcheval list <targets|profiles>');
+    return;
+  }
+  if (command === 'doctor') {
+    const requestedTarget = rest[0];
+    const targets = requestedTarget ? phaseOneDependencies.targets.filter((target) => target.id === requestedTarget) : phaseOneDependencies.targets;
+    if (requestedTarget && targets.length === 0) throw new Error(`Unknown target: ${requestedTarget}.`);
+    const diagnosis = await Promise.all(targets.map(async (target) => {
+      const metadata = await target.metadata();
+      const health = await target.health();
+      return { id: metadata.id, displayName: metadata.displayName, mode: metadata.mode, version: metadata.version, healthy: health.healthy, details: health.details, capabilities: metadata.capabilities };
+    }));
+    console.log(JSON.stringify(diagnosis, null, 2));
     return;
   }
   if (command === 'report') {

@@ -78,6 +78,12 @@ npm run lint
 npm run eval:local
 ```
 
+## Target readiness
+
+Run `orcheval doctor` to see whether each reference target is using its local
+simulator or a configured live runner, together with its health result. Use
+`orcheval doctor temporal` to inspect one target before running an evaluation.
+
 ## Security
 
 See [SECURITY.md](SECURITY.md) for supported versions and responsible disclosure instructions.

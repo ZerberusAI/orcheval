@@ -23,6 +23,16 @@ Phase 1 focuses on the orchestration/evaluation core and a credible v0.1 release
 - evidence capture and reproducible result bundles;
 - CLI-driven evaluation and reporting.
 
+## Current implementation status
+
+The repository now provides the Phase 1 contracts, the complete `ai-orchestration`
+scenario set, evidence/result bundles, a security-baseline gate, and local CLI
+execution. The bundled Hatchet, Temporal and Inngest targets are deterministic
+contract simulators. They exercise the framework locally but deliberately produce
+`NOT_VALIDATED` mandatory-gate results, so they cannot be interpreted as vendor
+validation or a benchmark. Live target adapters and their integration environments
+are the next Phase 1 delivery item.
+
 ## Phase 2 scope
 
 Phase 2 expands the framework into a broader runtime assurance platform, including:

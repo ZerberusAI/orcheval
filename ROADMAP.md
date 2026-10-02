@@ -2,14 +2,24 @@
 
 ## Phase 1 — v0.1.0
 
-- public OSS repository and governance baseline
-- core evaluation contracts and engine
-- AI orchestration profile
-- reference adapters: Hatchet, Temporal, Inngest
-- security gate engine
-- evidence and result bundles
-- CLI and YAML-driven runs
-- reporting and CI validation
+Completed locally:
+
+- [x] public OSS repository and governance baseline
+- [x] core evaluation contracts, engine and contract harness
+- [x] `ai-orchestration` profile with ORCH-01 through ORCH-10
+- [x] deterministic local contract simulators for Hatchet, Temporal and Inngest
+- [x] security-baseline engine with all SEC-001 through SEC-008 evidence fields
+- [x] latency, throughput, burst and traceability metric plugins
+- [x] YAML validation, CLI execution, reporting and reproducible result bundles
+- [x] CI build, test, lint and CLI smoke-test workflow
+- [x] live-runner protocol for vendor SDK/API adapters
+
+Remaining before `v0.1.0`:
+
+- [ ] implement and integration-test live Hatchet, Temporal and Inngest runners
+- [ ] provision reproducible local or hosted test environments for those runners
+- [ ] collect live evidence for all security assertions and publish verified example bundles
+- [ ] perform release packaging and publish the first public release
 
 ## Phase 2 — v1.0.0
 

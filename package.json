@@ -6,14 +6,15 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test",
-    "lint": "echo 'No lint configuration configured yet.' && exit 0",
-    "eval:local": "echo 'Local evaluation placeholder for Phase 1 scaffolding.'"
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "eval:local": "node --experimental-strip-types packages/cli/index.ts run examples/orchestration-evaluation.yaml"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22.6"
   },
   "devDependencies": {
+    "@types/node": "^24.19.1",
     "typescript": "^7.0.2"
   }
 }

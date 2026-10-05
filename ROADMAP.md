@@ -13,10 +13,11 @@ Completed locally:
 - [x] YAML validation, CLI execution, reporting and reproducible result bundles
 - [x] CI build, test, lint and CLI smoke-test workflow
 - [x] live-runner protocol for vendor SDK/API adapters
+- [x] container-isolated Temporal and Inngest ORCH-01 smoke lab, with untested security evidence marked unknown
 
 Remaining before `v0.1.0`:
 
-- [ ] implement and integration-test live Hatchet, Temporal and Inngest runners
+- [ ] complete and integration-test full-profile live Hatchet, Temporal and Inngest runners
 - [ ] provision reproducible local or hosted test environments for those runners
 - [ ] collect live evidence for all security assertions and publish verified example bundles
 - [ ] perform release packaging and publish the first public release

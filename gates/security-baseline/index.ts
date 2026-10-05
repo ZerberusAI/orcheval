@@ -1,31 +1,38 @@
-import type { EvaluationEvidence, EvaluationGate, GateResult } from '../../packages/core/index.ts';
+import type { EvaluationEvidence, EvaluationGate, ExecutionObservation, GateResult } from '../../packages/core/index.ts';
+
+function absent(value: boolean | null | undefined): boolean | null { return typeof value === 'boolean' ? !value : null; }
 
 const ASSERTIONS = [
-  ['SEC-001', 'Tenant isolation', true, (value: { crossTenantLeakDetected: boolean }) => !value.crossTenantLeakDetected],
-  ['SEC-002', 'Secret handling', true, (value: { secretExposureDetected: boolean }) => !value.secretExposureDetected],
-  ['SEC-003', 'Retry safety', true, (value: { duplicateSideEffects: number }) => value.duplicateSideEffects === 0],
-  ['SEC-004', 'Execution identity integrity', true, (value: { identitySubstitutionAllowed: boolean }) => !value.identitySubstitutionAllowed],
-  ['SEC-005', 'Cancellation integrity', true, (value: { cancellationAffectedUnrelatedWork: boolean }) => !value.cancellationAffectedUnrelatedWork],
-  ['SEC-006', 'Audit trace integrity', true, (value: { auditTrailComplete: boolean }) => value.auditTrailComplete],
-  ['SEC-007', 'Failure recovery integrity', true, (value: { recoverySkippedSteps: boolean }) => !value.recoverySkippedSteps],
-  ['SEC-008', 'Cross-run state leakage', true, (value: { crossTenantLeakDetected: boolean }) => !value.crossTenantLeakDetected],
+  ['SEC-001', 'Tenant isolation', (value: ExecutionObservation) => absent(value.crossTenantLeakDetected)],
+  ['SEC-002', 'Secret handling', (value: ExecutionObservation) => absent(value.secretExposureDetected)],
+  ['SEC-003', 'Retry safety', (value: ExecutionObservation) => typeof value.duplicateSideEffects !== 'number' ? null : value.duplicateSideEffects === 0],
+  ['SEC-004', 'Execution identity integrity', (value: ExecutionObservation) => absent(value.identitySubstitutionAllowed)],
+  ['SEC-005', 'Cancellation integrity', (value: ExecutionObservation) => absent(value.cancellationAffectedUnrelatedWork)],
+  ['SEC-006', 'Audit trace integrity', (value: ExecutionObservation) => value.auditTrailComplete],
+  ['SEC-007', 'Failure recovery integrity', (value: ExecutionObservation) => absent(value.recoverySkippedSteps)],
+  ['SEC-008', 'Cross-run state leakage', (value: ExecutionObservation) => absent(value.crossRunLeakDetected)],
 ] as const;
 
 export const securityBaselineGate: EvaluationGate = {
   id: 'security-baseline',
-  version: '1.0.0',
+  version: '1.1.0',
   mandatory: true,
   async evaluate(evidence: EvaluationEvidence): Promise<GateResult> {
     const observations = evidence.targets.flatMap((target) => target.observations);
-    const assertions = ASSERTIONS.map(([id, description, observable, predicate]) => ({ id, description, observable, pass: observations.length > 0 && observations.every(predicate) }));
+    const assertions = ASSERTIONS.map(([id, description, predicate]) => {
+      const checks = observations.map(predicate);
+      return { id, description, failed: checks.some((value) => value === false), validated: checks.length > 0 && checks.every((value) => value === true) };
+    });
     const allLive = evidence.targets.length > 0 && evidence.targets.every(({ target }) => target.mode === 'LIVE');
-    const status = !observations.length ? 'NOT_VALIDATED' : assertions.some((assertion) => assertion.observable && !assertion.pass) ? 'FAIL' : allLive && assertions.every((assertion) => assertion.observable) ? 'PASS' : 'NOT_VALIDATED';
+    const completeCoverage = evidence.targets.length > 0 && evidence.targets.every((target) => target.health.healthy && evidence.manifest.profile.scenarios.filter((scenario) => scenario.required).every((scenario) => target.observations.filter((observation) => observation.workloadId === scenario.id).length === evidence.config.repetitions));
+    const status = assertions.some((assertion) => assertion.failed) ? 'FAIL' : allLive && completeCoverage && assertions.every((assertion) => assertion.validated) ? 'PASS' : 'NOT_VALIDATED';
     return {
       id: 'security-baseline', mandatory: true, status,
-      details: assertions.map((assertion) => `${assertion.id} ${assertion.description}: ${!assertion.observable ? 'not validated by the current evidence model' : assertion.pass ? 'observed' : 'failed'}.`),
+      details: assertions.map((assertion) => `${assertion.id} ${assertion.description}: ${assertion.failed ? 'failed' : allLive && completeCoverage && assertion.validated ? 'observed' : 'not validated'}.`),
       evidence: [
         `${observations.length} execution observations evaluated.`,
         allLive ? 'Evidence comes from live targets.' : 'Evidence comes from SIMULATED targets; it is not vendor validation.',
+        completeCoverage ? 'Required scenario observation counts are present.' : 'A target is unhealthy or required observations are missing.',
       ],
     };
   },

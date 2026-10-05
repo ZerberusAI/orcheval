@@ -33,6 +33,11 @@ contract simulators. They exercise the framework locally but deliberately produc
 validation or a benchmark. Live target adapters and their integration environments
 are the next Phase 1 delivery item.
 
+An isolated [Docker smoke lab](docs/local-docker-evaluation.md) now executes the
+sequential scenario through real Temporal and Inngest SDKs. Dependencies are
+installed only inside Docker; the host package manifest and dependencies are
+unchanged. This lab covers ORCH-01 only and keeps security gates `NOT_VALIDATED`.
+
 ## Phase 2 scope
 
 Phase 2 expands the framework into a broader runtime assurance platform, including:

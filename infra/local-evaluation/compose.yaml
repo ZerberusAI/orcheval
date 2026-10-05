@@ -1,0 +1,71 @@
+name: orcheval-phase1
+
+x-sdk: &sdk
+  image: orcheval-phase1-sdk:1
+  build:
+    context: .
+  init: true
+  cpus: 1.0
+  mem_limit: 1536m
+  volumes:
+    - ./:/opt/orcheval-lab/src:ro
+  networks:
+    - evaluation
+
+services:
+  temporal:
+    image: temporalio/temporal@sha256:ad4c82c97bd12b417d1ea942610dbcd511afb250c4d5ed26c694009533df447e
+    command: ["server", "start-dev", "--ip", "0.0.0.0", "--db-filename", "/tmp/temporal.db"]
+    cpus: 1.0
+    mem_limit: 1536m
+    networks:
+      - evaluation
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "localhost:7233"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  temporal-worker:
+    <<: *sdk
+    command: ["node", "src/temporal-worker.mjs"]
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+    depends_on:
+      temporal:
+        condition: service_healthy
+
+  inngest:
+    image: inngest/inngest@sha256:b251da91bd014d56816c3159c606f470d6e423be9a12fbed45808636160aa92c
+    command: ["inngest", "dev", "--no-discovery", "-u", "http://inngest-app:3000/api/inngest"]
+    cpus: 1.0
+    mem_limit: 1024m
+    networks:
+      - evaluation
+
+  inngest-app:
+    <<: *sdk
+    command: ["node", "src/inngest-app.mjs"]
+    mem_limit: 512m
+    environment:
+      INNGEST_DEV: "1"
+      INNGEST_BASE_URL: http://inngest:8288
+
+  evaluation:
+    <<: *sdk
+    profiles: ["tools"]
+    command: ["node", "--experimental-strip-types", "src/smoke.mjs"]
+    mem_limit: 512m
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      INNGEST_DEV: "1"
+      INNGEST_BASE_URL: http://inngest:8288
+      INNGEST_APP_URL: http://inngest-app:3000
+      ORCHEVAL_SDK_IMAGE_ID: ${ORCHEVAL_SDK_IMAGE_ID:-unknown}
+    volumes:
+      - ./:/opt/orcheval-lab/src:ro
+      - ../../:/workspace:ro
+
+networks:
+  evaluation:
+    internal: true

@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 
 import type { EvaluationContext, EvaluationExecution, EvaluationSignal, EvaluationTarget, ExecutionHandle, ExecutionObservation, HealthResult, TargetMetadata, WorkloadDefinition } from '../packages/core/index.ts';
 
-export interface RunnerCommand { command: string; args?: string[]; }
+export interface RunnerCommand { command: string; args?: string[]; timeoutMs?: number; maxOutputBytes?: number; }
 interface RunnerRequest { action: 'metadata' | 'setup' | 'health' | 'execute' | 'signal' | 'cancel' | 'observe' | 'teardown'; targetId: string; payload?: unknown; }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -14,7 +14,13 @@ function asObservation(value: unknown): ExecutionObservation {
   const response = asRecord(value);
   const requiredStrings = ['executionId', 'tenantId', 'correlationId', 'workloadId', 'startedAt', 'endedAt', 'outcome'];
   const requiredBooleans = ['crossTenantLeakDetected', 'secretExposureDetected', 'identitySubstitutionAllowed', 'cancellationAffectedUnrelatedWork', 'auditTrailComplete', 'recoverySkippedSteps'];
-  if (!requiredStrings.every((field) => typeof response[field] === 'string') || !requiredBooleans.every((field) => typeof response[field] === 'boolean') || !Array.isArray(response.steps) || !Array.isArray(response.errors) || typeof response.attempts !== 'number' || typeof response.duplicateSideEffects !== 'number') throw new Error(`Runner observation for ${String(response.executionId ?? 'unknown')} does not satisfy the Phase 1 evidence contract.`);
+  const validCount = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+  const outcomes = ['SUCCEEDED', 'FAILED', 'CANCELLED', 'WAITING'];
+  if (!requiredStrings.every((field) => typeof response[field] === 'string') || !requiredBooleans.every((field) => typeof response[field] === 'boolean' || response[field] === null) || !outcomes.includes(String(response.outcome)) || !Array.isArray(response.steps) || !Array.isArray(response.errors) || !response.errors.every((error) => typeof error === 'string') || !validCount(response.attempts) || !(response.duplicateSideEffects === null || validCount(response.duplicateSideEffects)) || !response.steps.every((step) => {
+    const entry = asRecord(step);
+    return ['id', 'startedAt', 'endedAt'].every((key) => typeof entry[key] === 'string') && validCount(entry.attempt) && outcomes.includes(String(entry.outcome));
+  })) throw new Error(`Runner observation for ${String(response.executionId ?? 'unknown')} does not satisfy the Phase 1 evidence contract.`);
+  if (response.crossRunLeakDetected !== undefined && response.crossRunLeakDetected !== null && typeof response.crossRunLeakDetected !== 'boolean') throw new Error('Invalid cross-run leakage evidence.');
   return response as unknown as ExecutionObservation;
 }
 
@@ -32,6 +38,9 @@ export class RunnerTarget implements EvaluationTarget {
     this.id = id;
     this.displayName = displayName;
     this.runner = runner;
+    for (const value of [runner.timeoutMs ?? 30_000, runner.maxOutputBytes ?? 1_048_576]) {
+      if (!Number.isSafeInteger(value) || value <= 0) throw new Error('Runner limits must be positive integers.');
+    }
   }
 
   private call(action: RunnerRequest['action'], payload?: unknown): Promise<Record<string, unknown>> {
@@ -39,14 +48,33 @@ export class RunnerTarget implements EvaluationTarget {
       const child = spawn(this.runner.command, this.runner.args ?? [], { shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
       let stdout = '';
       let stderr = '';
+      let settled = false;
+      let bytes = 0;
+      const finish = (error?: Error, response?: Record<string, unknown>) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (error) { child.kill('SIGKILL'); reject(error); }
+        else resolve(response!);
+      };
+      const timer = setTimeout(() => finish(new Error(`Runner for ${this.id} timed out during ${action}.`)), this.runner.timeoutMs ?? 30_000);
       child.stdout.setEncoding('utf8');
       child.stderr.setEncoding('utf8');
-      child.stdout.on('data', (chunk: string) => { stdout += chunk; });
-      child.stderr.on('data', (chunk: string) => { stderr += chunk; });
-      child.on('error', reject);
+      const collect = (chunk: string, stream: 'stdout' | 'stderr') => {
+        if (settled) return;
+        bytes += Buffer.byteLength(chunk);
+        if (bytes > (this.runner.maxOutputBytes ?? 1_048_576)) { finish(new Error(`Runner for ${this.id} exceeded its output limit.`)); return; }
+        if (stream === 'stdout') stdout += chunk;
+        else stderr += chunk;
+      };
+      child.stdout.on('data', (chunk: string) => collect(chunk, 'stdout'));
+      child.stderr.on('data', (chunk: string) => collect(chunk, 'stderr'));
+      child.on('error', (error) => finish(error));
+      child.stdin.on('error', (error) => finish(error));
       child.on('close', (code) => {
-        if (code !== 0) { reject(new Error(`Runner for ${this.id} exited with ${code}: ${stderr.trim()}`)); return; }
-        try { resolve(asRecord(JSON.parse(stdout))); } catch (error) { reject(new Error(`Runner for ${this.id} returned invalid JSON: ${error instanceof Error ? error.message : String(error)}`)); }
+        if (settled) return;
+        if (code !== 0) { finish(new Error(`Runner for ${this.id} exited with ${code}: ${stderr.trim()}`)); return; }
+        try { finish(undefined, asRecord(JSON.parse(stdout))); } catch (error) { finish(new Error(`Runner for ${this.id} returned invalid JSON: ${error instanceof Error ? error.message : String(error)}`)); }
       });
       child.stdin.end(`${JSON.stringify({ action, targetId: this.id, payload } satisfies RunnerRequest)}\n`);
     });

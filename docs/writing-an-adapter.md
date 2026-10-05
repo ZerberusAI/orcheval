@@ -42,6 +42,19 @@ Supported actions are `metadata`, `setup`, `health`, `execute`, `signal`, `cance
 `cancellationAffectedUnrelatedWork`, `auditTrailComplete`,
 `recoverySkippedSteps`, and the execution's tenant/correlation identifiers.
 
+Use `null` for untested security checks, including `duplicateSideEffects` when
+no side-effect probe ran. `crossRunLeakDetected` is a separate optional nullable
+field for SEC-008; tenant isolation cannot substitute for that check. Missing or
+unknown evidence cannot produce a passing baseline. The engine checks execution,
+tenant, correlation and workload identities and requires coherent step timelines.
+Gate results identify the target they evaluate.
+
+Runner calls default to a 30-second deadline and a 1 MiB combined stdout/stderr
+limit. `RunnerCommand.timeoutMs` and `RunnerCommand.maxOutputBytes` can override
+these limits programmatically. A timeout or excessive output kills the runner
+process and rejects the call. Persistent workers belong in the separately
+managed runtime environment, not in a runner subprocess.
+
 A configured runner is marked `LIVE`; absent configuration retains the deterministic
 local simulator. The runner is the boundary where an official Temporal, Hatchet, or
 Inngest SDK implementation belongs.

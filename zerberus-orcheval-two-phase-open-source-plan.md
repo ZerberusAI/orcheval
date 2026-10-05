@@ -190,6 +190,30 @@ Finalised Phase 1 scope:
 
 Phase 1 proves the architecture and the evidence model. It must **not** attempt to support every workload/runtime category before the core is validated.
 
+## Execution status — 2026-10-05
+
+Work is local on `feature/Phase1-Evaluations`. The requested branch name contained a space, which Git does not allow. No remote deployment or Git pull is part of this execution plan.
+
+| Work package | Status | Evidence / remaining work |
+| --- | --- | --- |
+| 1. Configuration replay and reproducible bundles | Complete locally | Commit `1cfcf0b`; resolved configuration, content fingerprints, version metadata and overwrite protection. |
+| 2. Evidence and execution lifecycle | In progress | Per-target mandatory gates, nullable security assertions, identity/timestamp validation and bounded subprocesses implemented. Approval/resume, cancellation and bounded state polling are next. |
+| 3. Temporal sequential vertical slice | Complete locally | Three real ORCH-01 executions, five activities each, through the Node SDK in Docker; workflow histories captured. |
+| 4. Temporal full scenario coverage | Pending | Extend from ORCH-01 to ORCH-06 approval/resume and ORCH-07 cancellation, then parallelism, retries, recovery, tenant/load/context/version scenarios. |
+| 5. Inngest and Hatchet parity | In progress | Three real Inngest ORCH-01 executions, five steps each, in Docker; Hatchet live evaluation has not started. |
+| 6. Metrics, documentation and release | Pending | Full-profile security probes, measured load, comparable metrics, verified example bundles and release packaging remain. |
+
+Checkpoint validation: 29 tests pass; TypeScript build and lint pass. Docker evidence is under `results/local-docker/20261005T150928Z-79039/evaluation-40f4f30f-733a-4782-8fa0-41f44bd05933/` (ignored local output). The smoke report is **INCOMPLETE**: security assertions were not exercised and remain **NOT_VALIDATED** for both targets. Sequential success is not a security or full Phase 1 acceptance result.
+
+Environment boundary: all vendor SDKs and npm downloads remain inside the dedicated Docker image. Repository mounts are read-only during evaluation; the host package manifest, lockfile and installed dependencies remain unchanged. The isolated Compose project publishes no host ports. Its containers and network were removed after the run; downloaded images/build cache remain in Docker. See `docs/local-docker-evaluation.md` for reproduction and cleanup.
+
+Next implementation milestone:
+
+1. Add explicit nonterminal states, bounded polling and captured lifecycle actions to the adapter contract and engine.
+2. Drive approval only after observing the wait state; verify resume reaches a terminal result.
+3. Drive cancellation after observing the selected state and verify terminal cancellation. Keep unrelated-run isolation and queued/running/waiting coverage unknown until separately exercised.
+4. Exercise these paths with real SDKs in the isolated lab, retain raw evidence, update this status and preserve the environment boundary.
+
 ---
 
 # 4. Phase 1 Architecture

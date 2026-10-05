@@ -19,7 +19,7 @@ export interface EvaluationExecution { id: string; tenantId: string; correlation
 export interface ExecutionHandle { executionId: string; }
 export interface EvaluationSignal { name: string; payload?: unknown; }
 export interface StepObservation { id: string; startedAt: string; endedAt: string; attempt: number; outcome: ExecutionOutcome; }
-export interface ExecutionObservation { executionId: string; tenantId: string; correlationId: string; workloadId: string; startedAt: string; endedAt: string; outcome: ExecutionOutcome; steps: StepObservation[]; attempts: number; errors: string[]; duplicateSideEffects: number; crossTenantLeakDetected: boolean; secretExposureDetected: boolean; identitySubstitutionAllowed: boolean; cancellationAffectedUnrelatedWork: boolean; auditTrailComplete: boolean; recoverySkippedSteps: boolean; }
+export interface ExecutionObservation { executionId: string; tenantId: string; correlationId: string; workloadId: string; startedAt: string; endedAt: string; outcome: ExecutionOutcome; steps: StepObservation[]; attempts: number; errors: string[]; duplicateSideEffects: number | null; crossTenantLeakDetected: boolean | null; secretExposureDetected: boolean | null; identitySubstitutionAllowed: boolean | null; cancellationAffectedUnrelatedWork: boolean | null; auditTrailComplete: boolean | null; recoverySkippedSteps: boolean | null; crossRunLeakDetected?: boolean | null; }
 
 export interface EvaluationTarget {
   id: string;
@@ -36,7 +36,7 @@ export interface EvaluationTarget {
 export interface TargetEvidence { target: TargetMetadata; health: HealthResult; observations: ExecutionObservation[]; }
 export interface TraceEvent { name: string; timestamp: string; attributes: Record<string, string | number | boolean>; }
 export interface EvaluationEvidence { evaluationId: string; runId: string; fingerprint: string; configurationHash: string; profileId: string; profileVersion: string; config: ResolvedEvaluationConfig; manifest: ReproductionManifest; host: ReturnType<typeof captureHostEnvironment>; targets: TargetEvidence[]; traces: TraceEvent[]; capturedAt: string; }
-export interface GateResult { id: string; mandatory: boolean; status: GateStatus; details: string[]; evidence: string[]; }
+export interface GateResult { id: string; targetId?: string; mandatory: boolean; status: GateStatus; details: string[]; evidence: string[]; }
 export interface MetricResult { id: string; status: MetricStatus; raw: Record<string, number | string | boolean>; normalised?: number; score?: number; confidence: 'HIGH' | 'MEDIUM' | 'LOW'; limitations: string[]; }
 export interface EvaluationGate { id: string; version?: string; mandatory: boolean; evaluate(evidence: EvaluationEvidence): Promise<GateResult>; }
 export interface MetricPlugin { id: string; version?: string; requirements(): string[]; evaluate(evidence: EvaluationEvidence): Promise<MetricResult>; }
@@ -85,9 +85,9 @@ export function validateConfig(config: EvaluationConfig, dependencies?: EngineDe
 
 export function buildReportMarkdown(result: EvaluationRunResult): string {
   const targetRows = result.evidence.targets.map((entry) => `| ${entry.target.displayName} | ${entry.target.mode} | ${entry.observations.length} | ${entry.health.healthy ? 'PASS' : 'FAIL'} |`).join('\n');
-  const gates = result.gates.map((gate) => `| ${gate.id} | ${gate.status} | ${gate.details.join(' ')} |`).join('\n');
+  const gates = result.gates.map((gate) => `| ${gate.targetId ?? 'all'} | ${gate.id} | ${gate.status} | ${gate.details.join(' ')} |`).join('\n');
   const metrics = result.metrics.map((metric) => `| ${metric.id} | ${metric.status} | ${metric.normalised ?? 'n/a'} | ${metric.confidence} |`).join('\n');
-  return ['# Orcheval Evaluation Report', '', `Profile: ${result.profileId}`, `Fingerprint: ${result.evidence.fingerprint}`, `Status: ${result.summary.status}`, `Admissible: ${result.summary.eligible ? 'yes' : 'no'}`, '', result.summary.message, '', '## Targets', '| Target | Mode | Executions | Health |', '| --- | --- | ---: | --- |', targetRows, '', '## Mandatory gates', '| Gate | Status | Details |', '| --- | --- | --- |', gates, '', '## Metrics', '| Metric | Status | Normalised | Confidence |', '| --- | --- | ---: | --- |', metrics].join('\n');
+  return ['# Orcheval Evaluation Report', '', `Profile: ${result.profileId}`, `Fingerprint: ${result.evidence.fingerprint}`, `Status: ${result.summary.status}`, `Admissible: ${result.summary.eligible ? 'yes' : 'no'}`, '', result.summary.message, '', '## Targets', '| Target | Mode | Executions | Health |', '| --- | --- | ---: | --- |', targetRows, '', '## Mandatory gates', '| Target | Gate | Status | Details |', '| --- | --- | --- | --- |', gates, '', '## Metrics', '| Metric | Status | Normalised | Confidence |', '| --- | --- | ---: | --- |', metrics].join('\n');
 }
 
 export function buildEnvironmentSnapshot(result: EvaluationRunResult): Record<string, unknown> {
@@ -186,7 +186,16 @@ export class OrchevalEngine {
         if (health.healthy) for (const scenario of profile.scenarios) for (let repetition = 0; repetition < normalised.repetitions!; repetition += 1) {
           const execution: EvaluationExecution = { id: `${context.runId}-${scenario.id}-${repetition}`, tenantId: scenario.id === 'ORCH-03' ? ['tenant-a', 'tenant-b', 'tenant-c'][repetition % 3] : 'tenant-a', correlationId: `${context.runId}-${scenario.id}-${repetition}`, faults: normalised.faults!, cancellationRequested: scenario.id === 'ORCH-07' };
           const handle = await target.execute(scenario, execution);
-          observations.push(await target.observe(handle.executionId));
+          const observation = await target.observe(handle.executionId);
+          if (observation.executionId !== handle.executionId || observation.tenantId !== execution.tenantId || observation.correlationId !== execution.correlationId || observation.workloadId !== scenario.id) throw new Error(`Observation identity mismatch for ${execution.id}.`);
+          const start = Date.parse(observation.startedAt);
+          const end = Date.parse(observation.endedAt);
+          if (!Number.isFinite(start) || !Number.isFinite(end) || end < start || observation.steps.some((step) => {
+            const stepStart = Date.parse(step.startedAt);
+            const stepEnd = Date.parse(step.endedAt);
+            return !Number.isFinite(stepStart) || !Number.isFinite(stepEnd) || stepStart < start || stepEnd < stepStart || stepEnd > end;
+          })) throw new Error(`Invalid observation timeline for ${execution.id}.`);
+          observations.push(observation);
         }
         targetEvidence.push({ target: metadata, health, observations });
       } finally { await target.teardown(context); }
@@ -205,7 +214,7 @@ export class OrchevalEngine {
     const configurationHash = contentHash(normalised);
     const fingerprint = contentHash({ config: normalised, manifest });
     const evidence: EvaluationEvidence = { evaluationId, runId: evaluationId, fingerprint, configurationHash, profileId: profile.id, profileVersion: profile.version, config: normalised, manifest, host, targets: targetEvidence, traces, capturedAt: new Date().toISOString() };
-    const gates = await Promise.all(selectedGates.map((gate) => gate.evaluate(evidence)));
+    const gates = await Promise.all(targetEvidence.flatMap((target) => selectedGates.map(async (gate) => ({ ...await gate.evaluate({ ...evidence, targets: [target] }), targetId: target.target.id }))));
     const metrics = await Promise.all(selectedMetrics.map((metric) => metric.evaluate(evidence)));
     const failed = gates.some((gate) => gate.mandatory && gate.status === 'FAIL');
     const incomplete = gates.some((gate) => gate.mandatory && gate.status === 'NOT_VALIDATED');

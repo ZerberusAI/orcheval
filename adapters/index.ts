@@ -34,15 +34,15 @@ class SimulatedOrchestrationTarget implements EvaluationTarget {
     const injectedWorkerFailure = execution.faults.includes('worker_kill') && workload.id === 'ORCH-05';
     const outcome = execution.cancellationRequested ? 'CANCELLED' : 'SUCCEEDED';
     const steps = (WORKFLOW_STEPS[workload.kind] ?? ['execute']).map((id, index) => {
-      const timestamp = new Date(Date.now() + index).toISOString();
+      const timestamp = new Date(Date.parse(startedAt) + index).toISOString();
       return { id, startedAt: timestamp, endedAt: timestamp, attempt: injectedTransientFailure && index === 0 ? 2 : 1, outcome: outcome as 'SUCCEEDED' | 'CANCELLED' };
     });
     this.executions.set(execution.id, {
       executionId: execution.id, tenantId: execution.tenantId, correlationId: execution.correlationId, workloadId: workload.id,
-      startedAt, endedAt: new Date().toISOString(), outcome: outcome as 'SUCCEEDED' | 'CANCELLED', steps,
+      startedAt, endedAt: steps.at(-1)?.endedAt ?? startedAt, outcome: outcome as 'SUCCEEDED' | 'CANCELLED', steps,
       attempts: injectedTransientFailure ? 2 : 1, errors: injectedWorkerFailure ? ['Injected worker failure recovered.'] : [],
       duplicateSideEffects: 0, crossTenantLeakDetected: false, secretExposureDetected: false, identitySubstitutionAllowed: false,
-      cancellationAffectedUnrelatedWork: false, auditTrailComplete: true, recoverySkippedSteps: false,
+      cancellationAffectedUnrelatedWork: false, auditTrailComplete: true, recoverySkippedSteps: false, crossRunLeakDetected: false,
     });
     return { executionId: execution.id };
   }

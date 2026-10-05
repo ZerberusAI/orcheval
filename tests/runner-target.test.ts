@@ -35,3 +35,29 @@ test('runner target preserves reproduction metadata and executes the protocol wi
   assert.equal(observation.secretExposureDetected, false);
   await target.teardown({ evaluationId: 'evaluation-1', runId: 'run-1', profileId: 'ai-orchestration', targetId: 'temporal' });
 });
+
+test('runner protocol preserves unknown security checks as null', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'orcheval-runner-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const runnerPath = join(dir, 'runner.mjs');
+  await writeFile(runnerPath, runnerSource.replace('secretExposureDetected: false', 'secretExposureDetected: null').replace('duplicateSideEffects: 0', 'duplicateSideEffects: null'));
+  const target = new RunnerTarget('temporal', 'Temporal', { command: process.execPath, args: [runnerPath] });
+  const observation = await target.observe('execution-1');
+  assert.equal(observation.secretExposureDetected, null);
+  assert.equal(observation.duplicateSideEffects, null);
+});
+
+test('runner calls time out and kill stalled processes', async () => {
+  const target = new RunnerTarget('stalled', 'Stalled', { command: process.execPath, args: ['-e', 'process.stdin.resume(); setInterval(() => {}, 1000);'], timeoutMs: 150 });
+  await assert.rejects(() => target.health(), /timed out during health/);
+});
+
+test('runner output limits stop excessive output', async () => {
+  const target = new RunnerTarget('noisy', 'Noisy', { command: process.execPath, args: ['-e', 'process.stdout.write("x".repeat(4096)); setInterval(() => {}, 1000);'], timeoutMs: 2_000, maxOutputBytes: 128 });
+  await assert.rejects(() => target.health(), /output limit/);
+});
+
+test('runner rejects malformed observations', async () => {
+  const target = new RunnerTarget('malformed', 'Malformed', { command: process.execPath, args: ['-e', 'process.stdin.resume(); process.stdin.on("end", () => process.stdout.write(JSON.stringify({executionId: "x", attempts: -1})));'] });
+  await assert.rejects(() => target.observe('x'), /evidence contract/);
+});

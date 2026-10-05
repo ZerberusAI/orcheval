@@ -17,6 +17,13 @@ to produce admissibility claims. A live adapter must attach captured observation
 for each execution, including tenant and correlation identifiers, step attempts,
 outcome, retries, cancellation effects and audit-trail completeness.
 
+For reproducibility, metadata may additionally include `adapterVersion`,
+`sdkVersions` (a package-name-to-version map), and `containerImageDigests` (an array
+of image digests). The runner protocol preserves these fields in the bundle and
+fingerprint. Supply the versions actually used. Omitted fields are recorded as
+unknown; use an empty map/list only when no SDKs/images apply. Gate and metric
+plugins can similarly declare a `version`, which is recorded in the manifest.
+
 Adapter-specific concepts belong inside the adapter, not in the framework core.
 
 ## Live runner protocol

@@ -54,7 +54,15 @@ export class RunnerTarget implements EvaluationTarget {
 
   async metadata(): Promise<TargetMetadata> {
     const response = await this.call('metadata');
-    return { id: this.id, displayName: typeof response.displayName === 'string' ? response.displayName : this.displayName, version: typeof response.version === 'string' ? response.version : 'unknown', mode: 'LIVE', capabilities: Array.isArray(response.capabilities) ? response.capabilities.filter((item): item is string => typeof item === 'string') : [] };
+    const sdkVersions = response.sdkVersions;
+    return {
+      id: this.id, displayName: typeof response.displayName === 'string' ? response.displayName : this.displayName,
+      version: typeof response.version === 'string' ? response.version : 'unknown', mode: 'LIVE',
+      capabilities: Array.isArray(response.capabilities) ? response.capabilities.filter((item): item is string => typeof item === 'string') : [],
+      adapterVersion: typeof response.adapterVersion === 'string' ? response.adapterVersion : undefined,
+      sdkVersions: sdkVersions && typeof sdkVersions === 'object' && !Array.isArray(sdkVersions) && Object.values(sdkVersions).every((value) => typeof value === 'string') ? sdkVersions as Record<string, string> : undefined,
+      containerImageDigests: Array.isArray(response.containerImageDigests) && response.containerImageDigests.every((value) => typeof value === 'string') ? response.containerImageDigests as string[] : undefined,
+    };
   }
   async setup(context: EvaluationContext): Promise<void> { await this.call('setup', context); }
   async health(): Promise<HealthResult> {

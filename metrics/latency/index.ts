@@ -10,7 +10,7 @@ function result(id: string, evidence: EvaluationEvidence, raw: Record<string, nu
 }
 
 export const latencyMetric: MetricPlugin = {
-  id: 'latency', requirements: () => ['execution timestamps'],
+  id: 'latency', version: '1.0.0', requirements: () => ['execution timestamps'],
   async evaluate(evidence) {
     const values = observations(evidence).map((entry) => elapsedMs(entry.startedAt, entry.endedAt));
     const averageMs = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
@@ -19,7 +19,7 @@ export const latencyMetric: MetricPlugin = {
 };
 
 export const throughputMetric: MetricPlugin = {
-  id: 'throughput', requirements: () => ['execution observations'],
+  id: 'throughput', version: '1.0.0', requirements: () => ['execution observations'],
   async evaluate(evidence) {
     const count = observations(evidence).filter((entry) => entry.outcome === 'SUCCEEDED').length;
     return result('throughput', evidence, { completedExecutions: count, configuredConcurrency: evidence.config.concurrency.join(',') }, Math.min(1, count / Math.max(1, evidence.targets.length * 10)));
@@ -27,7 +27,7 @@ export const throughputMetric: MetricPlugin = {
 };
 
 export const burstMetric: MetricPlugin = {
-  id: 'burst', requirements: () => ['tenant identifiers', 'execution observations'],
+  id: 'burst', version: '1.0.0', requirements: () => ['tenant identifiers', 'execution observations'],
   async evaluate(evidence) {
     const tenantIds = new Set(observations(evidence).map((entry) => entry.tenantId));
     const failures = observations(evidence).filter((entry) => entry.outcome === 'FAILED').length;
@@ -36,7 +36,7 @@ export const burstMetric: MetricPlugin = {
 };
 
 export const traceabilityMetric: MetricPlugin = {
-  id: 'traceability', requirements: () => ['correlation identifiers', 'step observations'],
+  id: 'traceability', version: '1.0.0', requirements: () => ['correlation identifiers', 'step observations'],
   async evaluate(evidence) {
     const entries = observations(evidence);
     const complete = entries.filter((entry) => entry.correlationId.length > 0 && entry.auditTrailComplete && entry.steps.length > 0).length;

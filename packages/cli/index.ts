@@ -37,7 +37,31 @@ faults:
   - worker_kill
 `;
 
-function unquote(value: string): string { return value.trim().replace(/^['"]|['"]$/g, ''); }
+function unquote(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.startsWith('"')) return JSON.parse(trimmed) as string;
+  if (trimmed.startsWith("'")) {
+    if (trimmed.length < 2 || !trimmed.endsWith("'")) throw new Error('Unterminated YAML string.');
+    return trimmed.slice(1, -1).replace(/''/g, "'");
+  }
+  return trimmed;
+}
+
+function stripComment(line: string): string {
+  let quote = '';
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (quote === '"' && char === '\\') { index += 1; continue; }
+    if (quote === "'" && char === "'" && line[index + 1] === "'") { index += 1; continue; }
+    if (quote && char === quote) quote = '';
+    else if (!quote && (char === '"' || char === "'")) {
+      const prefix = line.slice(0, index).trim();
+      if (!prefix || prefix === '-' || prefix.endsWith(':')) quote = char;
+    }
+    else if (!quote && char === '#' && (index === 0 || /\s/.test(line[index - 1]))) return line.slice(0, index);
+  }
+  return line;
+}
 
 /** Parses the documented Phase 1 configuration subset and retains its nested list structure. */
 export function parseSimpleYamlConfig(content: string): EvaluationConfig {
@@ -45,11 +69,10 @@ export function parseSimpleYamlConfig(content: string): EvaluationConfig {
   let section = '';
   let activeList = '';
   for (const sourceLine of content.split(/\r?\n/)) {
-    const withoutComment = sourceLine.replace(/\s+#.*$/, '');
+    const withoutComment = stripComment(sourceLine);
     if (!withoutComment.trim()) continue;
     const indent = withoutComment.length - withoutComment.trimStart().length;
     const line = withoutComment.trim();
-    if (indent === 0 && line.endsWith(':')) { section = line.slice(0, -1); activeList = section === 'targets' || section === 'faults' ? section : ''; continue; }
     if (line.startsWith('- ')) {
       const value = unquote(line.slice(2));
       if (activeList === 'targets') (config.targets ??= []).push(value);
@@ -57,16 +80,30 @@ export function parseSimpleYamlConfig(content: string): EvaluationConfig {
       if (activeList === 'concurrency') (config.concurrency ??= []).push(Number(value));
       continue;
     }
-    const match = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+    const match = line.match(/^("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[A-Za-z0-9_-]+):\s*(.*)$/);
     if (!match) continue;
-    const [, key, rawValue] = match;
+    const [, rawKey, rawValue] = match;
+    const key = unquote(rawKey);
+    if (indent === 0) {
+      section = key;
+      activeList = key === 'targets' || key === 'faults' ? key : '';
+      if (key === 'targets' || key === 'faults' || key === 'gates' || key === 'metrics') {
+        if (rawValue !== '' && rawValue !== '[]') throw new Error(`${key} must use the documented YAML block format or [].`);
+        config[key] = [];
+      }
+      if (rawValue === '' || rawValue === '[]') continue;
+    }
     const value = unquote(rawValue);
     if (section === 'profile' && key === 'id') config.profileId = value;
     else if (section === 'runs' && key === 'repetitions') config.repetitions = Number(value);
     else if (section === 'gates' && indent === 2 && rawValue === '') (config.gates ??= []).push(key);
     else if (section === 'metrics' && indent === 2 && rawValue === '') activeList = `metric:${key}`;
     else if (section === 'metrics' && indent >= 4 && key === 'enabled' && value === 'true' && activeList.startsWith('metric:')) (config.metrics ??= []).push(activeList.slice(7));
-    else if (section === 'load' && key === 'concurrency') activeList = 'concurrency';
+    else if (section === 'load' && key === 'concurrency') {
+      if (rawValue !== '' && rawValue !== '[]') throw new Error('Concurrency must use a YAML block list.');
+      config.concurrency = [];
+      activeList = 'concurrency';
+    }
     else if (section === 'evaluation' && key === 'name') config.name = value;
     else if (key === 'version' && indent === 0) config.version = Number(value);
   }

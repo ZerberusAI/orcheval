@@ -13,6 +13,7 @@ const ASSERTIONS = [
 
 export const securityBaselineGate: EvaluationGate = {
   id: 'security-baseline',
+  version: '1.0.0',
   mandatory: true,
   async evaluate(evidence: EvaluationEvidence): Promise<GateResult> {
     const observations = evidence.targets.flatMap((target) => target.observations);

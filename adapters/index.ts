@@ -22,7 +22,7 @@ class SimulatedOrchestrationTarget implements EvaluationTarget {
   constructor(id: string, displayName: string) { this.id = id; this.displayName = displayName; }
 
   async metadata(): Promise<TargetMetadata> {
-    return { id: this.id, displayName: this.displayName, version: 'simulator-1.0.0', mode: 'SIMULATED', capabilities: ['durable-execution', 'external-signals', 'cancellation', 'telemetry-export', 'workflow-versioning'] };
+    return { id: this.id, displayName: this.displayName, version: 'simulator-1.0.0', mode: 'SIMULATED', adapterVersion: 'simulator-1.0.0', sdkVersions: {}, containerImageDigests: [], capabilities: ['durable-execution', 'external-signals', 'cancellation', 'telemetry-export', 'workflow-versioning'] };
   }
 
   async setup(_context: EvaluationContext): Promise<void> { this.executions.clear(); }

@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { writeEvaluationBundle } from '../packages/core/index.ts';
 import { createPhaseOneEngine } from '../packages/harness/index.ts';
 
-test('writes a reproducible evaluation bundle and markdown report', async () => {
+test('writes a reproducible evaluation bundle and markdown report', async (t) => {
   const result = await createPhaseOneEngine().run({
     profileId: 'ai-orchestration',
     targets: ['temporal', 'hatchet', 'inngest'],
@@ -17,6 +17,7 @@ test('writes a reproducible evaluation bundle and markdown report', async () => 
   });
 
   const baseDir = await mkdtemp(join(tmpdir(), 'orcheval-phase1-'));
+  t.after(() => rm(baseDir, { recursive: true, force: true }));
   const outputDir = await writeEvaluationBundle(result, baseDir);
 
   const reportStats = await stat(join(outputDir, 'report.md'));

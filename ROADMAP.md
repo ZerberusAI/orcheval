@@ -14,10 +14,12 @@ Completed locally:
 - [x] CI build, test, lint and CLI smoke-test workflow
 - [x] live-runner protocol for vendor SDK/API adapters
 - [x] container-isolated Temporal and Inngest ORCH-01 smoke lab, with untested security evidence marked unknown
+- [x] bounded lifecycle polling and Temporal approval/resume and waiting-cancellation lab scenarios
 
 Remaining before `v0.1.0`:
 
 - [ ] complete and integration-test full-profile live Hatchet, Temporal and Inngest runners
+- [ ] extend lifecycle checks to queued/running cancellation, unrelated-run isolation and Inngest parity
 - [ ] provision reproducible local or hosted test environments for those runners
 - [ ] collect live evidence for all security assertions and publish verified example bundles
 - [ ] perform release packaging and publish the first public release

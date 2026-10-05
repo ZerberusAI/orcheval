@@ -54,7 +54,7 @@ services:
   evaluation:
     <<: *sdk
     profiles: ["tools"]
-    command: ["node", "--experimental-strip-types", "src/smoke.mjs"]
+    command: ["sh", "-c", "node --experimental-strip-types --test src/inngest-runner.test.mjs && node --experimental-strip-types src/smoke.mjs"]
     mem_limit: 512m
     environment:
       TEMPORAL_ADDRESS: temporal:7233

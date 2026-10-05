@@ -197,22 +197,33 @@ Work is local on `feature/Phase1-Evaluations`. The requested branch name contain
 | Work package | Status | Evidence / remaining work |
 | --- | --- | --- |
 | 1. Configuration replay and reproducible bundles | Complete locally | Commit `1cfcf0b`; resolved configuration, content fingerprints, version metadata and overwrite protection. |
-| 2. Evidence and execution lifecycle | In progress | Per-target mandatory gates, nullable security assertions, identity/timestamp validation and bounded subprocesses implemented. Approval/resume, cancellation and bounded state polling are next. |
+| 2. Evidence and execution lifecycle | Foundation implemented | Per-target mandatory gates, nullable security assertions, identity/timestamp validation, nonterminal snapshots, bounded polling, abortable runner calls and recorded lifecycle actions. Full-profile fault/load orchestration remains. |
 | 3. Temporal sequential vertical slice | Complete locally | Three real ORCH-01 executions, five activities each, through the Node SDK in Docker; workflow histories captured. |
-| 4. Temporal full scenario coverage | Pending | Extend from ORCH-01 to ORCH-06 approval/resume and ORCH-07 cancellation, then parallelism, retries, recovery, tenant/load/context/version scenarios. |
+| 4. Temporal full scenario coverage | In progress | ORCH-06 approval/resume and the waiting-work subset of ORCH-07 pass three real executions each, with signal/cancel/terminal history assertions. Queued/running cancellation, unrelated-run effects, parallelism, retries, recovery and tenant/load/context/version scenarios remain. |
 | 5. Inngest and Hatchet parity | In progress | Three real Inngest ORCH-01 executions, five steps each, in Docker; Hatchet live evaluation has not started. |
 | 6. Metrics, documentation and release | Pending | Full-profile security probes, measured load, comparable metrics, verified example bundles and release packaging remain. |
 
-Checkpoint validation: 29 tests pass; TypeScript build and lint pass. Docker evidence is under `results/local-docker/20261005T150928Z-79039/evaluation-40f4f30f-733a-4782-8fa0-41f44bd05933/` (ignored local output). The smoke report is **INCOMPLETE**: security assertions were not exercised and remain **NOT_VALIDATED** for both targets. Sequential success is not a security or full Phase 1 acceptance result.
+Initial checkpoint `3455ba2`: 29 tests passed; TypeScript build and lint passed. Its Docker evidence is under `results/local-docker/20261005T150928Z-79039/evaluation-40f4f30f-733a-4782-8fa0-41f44bd05933/` (ignored local output).
+
+Lifecycle milestone validation: **39 tests**, TypeScript build and lint pass, plus **one Docker-only regression test** for Inngest's completed status arriving before its end timestamp. The runner now waits under its existing deadline and retains intermediate records instead of manufacturing an end time. Real integration checks passed **12 executions**: three ORCH-01 runs for each runtime, three Temporal approval/resume runs and three Temporal waiting cancellations.
+
+Latest evidence is under `results/local-docker/20261005T154350Z-88746/`:
+
+- `evaluation-334987e3-afcc-49a7-b3d7-ad261d1b80b1/`: sequential profile, both runtimes.
+- `evaluation-fc77439d-e760-4335-abfb-d0e9dc36de02/`: Temporal lifecycle profile, including engine action logs and server histories.
+
+Both reports remain **INCOMPLETE**: security assertions were not exercised and remain **NOT_VALIDATED**. Waiting cancellation alone does not validate SEC-005, unrelated-run isolation or the full ORCH-07 scenario. The restricted lab profiles are separate from full Phase 1 acceptance.
 
 Environment boundary: all vendor SDKs and npm downloads remain inside the dedicated Docker image. Repository mounts are read-only during evaluation; the host package manifest, lockfile and installed dependencies remain unchanged. The isolated Compose project publishes no host ports. Its containers and network were removed after the run; downloaded images/build cache remain in Docker. See `docs/local-docker-evaluation.md` for reproduction and cleanup.
 
 Next implementation milestone:
 
-1. Add explicit nonterminal states, bounded polling and captured lifecycle actions to the adapter contract and engine.
-2. Drive approval only after observing the wait state; verify resume reaches a terminal result.
-3. Drive cancellation after observing the selected state and verify terminal cancellation. Keep unrelated-run isolation and queued/running/waiting coverage unknown until separately exercised.
-4. Exercise these paths with real SDKs in the isolated lab, retain raw evidence, update this status and preserve the environment boundary.
+1. Add independently observed queued and running cancellation variants, with an unrelated control execution to verify cancellation scope.
+2. Extend Inngest to the same approval/resume and cancellation contract, using runtime evidence to establish that the wait is registered before sending an event.
+3. Exercise retry/idempotency and worker failure/recovery; expand the live security probes without converting missing evidence into passing assertions.
+4. Add Hatchet and the remaining full-profile scenarios before enabling comparative metrics or claiming Phase 1 completion.
+
+Lifecycle scope: polling is bounded after `execute` returns; runner setup/execute/teardown retain their per-call deadlines. In-process adapters must cooperate with abort signals and clean up in teardown. The engine cannot forcibly stop arbitrary in-process adapter code. No host npm install, remote deployment or Git pull was performed for either milestone.
 
 ---
 

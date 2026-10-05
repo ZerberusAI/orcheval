@@ -18,9 +18,13 @@ export function verifyResult(result) {
 
 export function observationFromResult(executionId, result, timing, runtimeEvidence) {
   verifyResult(result);
+  return observationFromSnapshot(executionId, { ...result, outcome: 'SUCCEEDED' }, timing, runtimeEvidence);
+}
+
+export function observationFromSnapshot(executionId, result, timing, runtimeEvidence) {
   return {
-    executionId, tenantId: result.execution.tenantId, correlationId: result.execution.correlationId, workloadId: 'ORCH-01',
-    ...timing, outcome: 'SUCCEEDED', steps: result.steps, attempts: 1, errors: [],
+    executionId, tenantId: result.execution.tenantId, correlationId: result.execution.correlationId, workloadId: result.workloadId ?? 'ORCH-01',
+    ...timing, outcome: result.outcome, steps: result.steps, attempts: 1, errors: [],
     // This smoke scenario does not perform the security probes. Unknown is explicit.
     duplicateSideEffects: null, crossTenantLeakDetected: null, secretExposureDetected: null,
     identitySubstitutionAllowed: null, cancellationAffectedUnrelatedWork: null,

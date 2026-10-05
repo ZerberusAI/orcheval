@@ -36,7 +36,8 @@ are the next Phase 1 delivery item.
 An isolated [Docker smoke lab](docs/local-docker-evaluation.md) now executes the
 sequential scenario through real Temporal and Inngest SDKs. Dependencies are
 installed only inside Docker; the host package manifest and dependencies are
-unchanged. This lab covers ORCH-01 only and keeps security gates `NOT_VALIDATED`.
+unchanged. The lab covers ORCH-01 for both runtimes, plus Temporal approval/resume
+and waiting cancellation. Security gates remain `NOT_VALIDATED`.
 
 ## Phase 2 scope
 

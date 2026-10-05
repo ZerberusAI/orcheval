@@ -42,7 +42,7 @@ test('engine rejects observation identity substitutions and invalid timelines', 
       observe: async (id: string) => {
         const observation = await source.observe(id);
         if (change === 'identity') observation.correlationId = 'another-execution';
-        else observation.steps[0].endedAt = new Date(Date.parse(observation.endedAt) + 1_000).toISOString();
+        else observation.steps[0].endedAt = new Date(Date.parse(observation.endedAt!) + 1_000).toISOString();
         return observation;
       },
     });

@@ -27,6 +27,7 @@ if (action === 'metadata') {
   response = { executionId: ids[0] };
 } else if (action === 'observe') {
   const deadline = Date.now() + 30_000;
+  const incompleteTerminalRecords = [];
   while (Date.now() < deadline) {
     const request = await fetch(`${base}/v1/events/${encodeURIComponent(payload.executionId)}/runs`, { signal: AbortSignal.timeout(5_000) });
     if (!request.ok) throw new Error(`Inngest run inspection failed: ${request.status} ${await request.text()}`);
@@ -34,12 +35,19 @@ if (action === 'metadata') {
     const run = data?.[0];
     if (run && ['failed', 'cancelled'].includes(run.status.toLowerCase())) throw new Error(`Inngest run ${run.run_id} ${run.status}.`);
     if (run?.status?.toLowerCase() === 'completed') {
+      // The dev server can publish Completed before its end timestamp arrives.
+      // Keep polling under the existing deadline; never invent a terminal time.
+      if (run.ended_at == null) {
+        incompleteTerminalRecords.push({ observedAt: new Date().toISOString(), run });
+        await delay(200);
+        continue;
+      }
       // The pinned dev server's REST response omits output. Pair its terminal
       // status with worker-captured output, keyed by the actual runtime run id.
       const capture = await fetch(`${app}/evidence/${encodeURIComponent(run.run_id)}`, { signal: AbortSignal.timeout(5_000) });
       if (!capture.ok) throw new Error(`Completed Inngest run has no worker evidence: ${run.run_id}.`);
       const workerResult = await capture.json();
-      response = observationFromResult(payload.executionId, workerResult, { startedAt: run.run_started_at, endedAt: run.ended_at }, { eventId: payload.executionId, run, workerResult, outputSource: 'worker capture matched to completed runtime run id' });
+      response = observationFromResult(payload.executionId, workerResult, { startedAt: run.run_started_at, endedAt: run.ended_at }, { eventId: payload.executionId, run, workerResult, incompleteTerminalRecords, outputSource: 'worker capture matched to completed runtime run id' });
       break;
     }
     await delay(200);

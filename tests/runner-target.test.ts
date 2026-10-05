@@ -52,6 +52,26 @@ test('runner calls time out and kill stalled processes', async () => {
   await assert.rejects(() => target.health(), /timed out during health/);
 });
 
+test('runner observations can be aborted by the enclosing execution deadline', async () => {
+  const target = new RunnerTarget('stalled', 'Stalled', { command: process.execPath, args: ['-e', 'process.stdin.resume(); setInterval(() => {}, 1000);'], timeoutMs: 10_000 });
+  const controller = new AbortController();
+  const result = target.observe('execution-1', { signal: controller.signal });
+  controller.abort();
+  await assert.rejects(result, /aborted during observe/);
+});
+
+test('runner preserves pending snapshots and rejects fabricated end times', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'orcheval-runner-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const runnerPath = join(dir, 'runner.mjs');
+  const pending = runnerSource.replace("outcome: 'SUCCEEDED'", "outcome: 'WAITING', observedAt: new Date().toISOString()");
+  const target = new RunnerTarget('temporal', 'Temporal', { command: process.execPath, args: [runnerPath] });
+  await writeFile(runnerPath, pending.replace('endedAt: new Date().toISOString()', 'endedAt: null'));
+  assert.equal((await target.observe('execution-1')).endedAt, null);
+  await writeFile(runnerPath, pending);
+  await assert.rejects(target.observe('execution-1'), /invalid lifecycle timestamps/);
+});
+
 test('runner output limits stop excessive output', async () => {
   const target = new RunnerTarget('noisy', 'Noisy', { command: process.execPath, args: ['-e', 'process.stdout.write("x".repeat(4096)); setInterval(() => {}, 1000);'], timeoutMs: 2_000, maxOutputBytes: 128 });
   await assert.rejects(() => target.health(), /output limit/);

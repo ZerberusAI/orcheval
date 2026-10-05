@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 
-import type { EvaluationContext, EvaluationExecution, EvaluationSignal, EvaluationTarget, ExecutionHandle, ExecutionObservation, HealthResult, TargetMetadata, WorkloadDefinition } from '../packages/core/index.ts';
+import type { EvaluationContext, EvaluationExecution, EvaluationSignal, EvaluationTarget, ExecutionHandle, ExecutionSnapshot, HealthResult, TargetCallOptions, TargetMetadata, WorkloadDefinition } from '../packages/core/index.ts';
 
 export interface RunnerCommand { command: string; args?: string[]; timeoutMs?: number; maxOutputBytes?: number; }
 interface RunnerRequest { action: 'metadata' | 'setup' | 'health' | 'execute' | 'signal' | 'cancel' | 'observe' | 'teardown'; targetId: string; payload?: unknown; }
@@ -10,18 +10,20 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function asObservation(value: unknown): ExecutionObservation {
+function asObservation(value: unknown): ExecutionSnapshot {
   const response = asRecord(value);
-  const requiredStrings = ['executionId', 'tenantId', 'correlationId', 'workloadId', 'startedAt', 'endedAt', 'outcome'];
+  const requiredStrings = ['executionId', 'tenantId', 'correlationId', 'workloadId', 'startedAt', 'outcome'];
   const requiredBooleans = ['crossTenantLeakDetected', 'secretExposureDetected', 'identitySubstitutionAllowed', 'cancellationAffectedUnrelatedWork', 'auditTrailComplete', 'recoverySkippedSteps'];
   const validCount = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
-  const outcomes = ['SUCCEEDED', 'FAILED', 'CANCELLED', 'WAITING'];
+  const outcomes = ['SUCCEEDED', 'FAILED', 'CANCELLED', 'WAITING', 'QUEUED', 'RUNNING'];
+  const pending = ['WAITING', 'QUEUED', 'RUNNING'].includes(String(response.outcome));
+  if (pending ? response.endedAt !== null || typeof response.observedAt !== 'string' : typeof response.endedAt !== 'string') throw new Error(`Runner observation does not satisfy the Phase 1 evidence contract: invalid lifecycle timestamps (outcome=${String(response.outcome)}, endedAt=${String(response.endedAt)}, observedAt=${String(response.observedAt)}).`);
   if (!requiredStrings.every((field) => typeof response[field] === 'string') || !requiredBooleans.every((field) => typeof response[field] === 'boolean' || response[field] === null) || !outcomes.includes(String(response.outcome)) || !Array.isArray(response.steps) || !Array.isArray(response.errors) || !response.errors.every((error) => typeof error === 'string') || !validCount(response.attempts) || !(response.duplicateSideEffects === null || validCount(response.duplicateSideEffects)) || !response.steps.every((step) => {
     const entry = asRecord(step);
     return ['id', 'startedAt', 'endedAt'].every((key) => typeof entry[key] === 'string') && validCount(entry.attempt) && outcomes.includes(String(entry.outcome));
   })) throw new Error(`Runner observation for ${String(response.executionId ?? 'unknown')} does not satisfy the Phase 1 evidence contract.`);
   if (response.crossRunLeakDetected !== undefined && response.crossRunLeakDetected !== null && typeof response.crossRunLeakDetected !== 'boolean') throw new Error('Invalid cross-run leakage evidence.');
-  return response as unknown as ExecutionObservation;
+  return response as unknown as ExecutionSnapshot;
 }
 
 /**
@@ -43,7 +45,7 @@ export class RunnerTarget implements EvaluationTarget {
     }
   }
 
-  private call(action: RunnerRequest['action'], payload?: unknown): Promise<Record<string, unknown>> {
+  private call(action: RunnerRequest['action'], payload?: unknown, options?: TargetCallOptions): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
       const child = spawn(this.runner.command, this.runner.args ?? [], { shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
       let stdout = '';
@@ -54,10 +56,13 @@ export class RunnerTarget implements EvaluationTarget {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        options?.signal.removeEventListener('abort', abort);
         if (error) { child.kill('SIGKILL'); reject(error); }
         else resolve(response!);
       };
+      const abort = () => finish(new Error(`Runner for ${this.id} aborted during ${action}.`));
       const timer = setTimeout(() => finish(new Error(`Runner for ${this.id} timed out during ${action}.`)), this.runner.timeoutMs ?? 30_000);
+      options?.signal.addEventListener('abort', abort, { once: true });
       child.stdout.setEncoding('utf8');
       child.stderr.setEncoding('utf8');
       const collect = (chunk: string, stream: 'stdout' | 'stderr') => {
@@ -76,7 +81,8 @@ export class RunnerTarget implements EvaluationTarget {
         if (code !== 0) { finish(new Error(`Runner for ${this.id} exited with ${code}: ${stderr.trim()}`)); return; }
         try { finish(undefined, asRecord(JSON.parse(stdout))); } catch (error) { finish(new Error(`Runner for ${this.id} returned invalid JSON: ${error instanceof Error ? error.message : String(error)}`)); }
       });
-      child.stdin.end(`${JSON.stringify({ action, targetId: this.id, payload } satisfies RunnerRequest)}\n`);
+      if (options?.signal.aborted) abort();
+      else child.stdin.end(`${JSON.stringify({ action, targetId: this.id, payload } satisfies RunnerRequest)}\n`);
     });
   }
 
@@ -102,9 +108,9 @@ export class RunnerTarget implements EvaluationTarget {
     if (typeof response.executionId !== 'string') throw new Error(`Runner for ${this.id} did not return an executionId.`);
     return { executionId: response.executionId };
   }
-  async signal(executionId: string, signal: EvaluationSignal): Promise<void> { await this.call('signal', { executionId, signal }); }
-  async cancel(executionId: string): Promise<void> { await this.call('cancel', { executionId }); }
-  async observe(executionId: string): Promise<ExecutionObservation> { return asObservation(await this.call('observe', { executionId })); }
+  async signal(executionId: string, signal: EvaluationSignal, options?: TargetCallOptions): Promise<void> { await this.call('signal', { executionId, signal }, options); }
+  async cancel(executionId: string, options?: TargetCallOptions): Promise<void> { await this.call('cancel', { executionId }, options); }
+  async observe(executionId: string, options?: TargetCallOptions): Promise<ExecutionSnapshot> { return asObservation(await this.call('observe', { executionId }, options)); }
   async teardown(context: EvaluationContext): Promise<void> { await this.call('teardown', context); }
 }
 

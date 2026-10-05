@@ -3,23 +3,29 @@ import { basename, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 import { captureFrameworkIdentity, captureHostEnvironment, contentHash, type ReproductionManifest } from './reproducibility.ts';
+import { completeExecution } from './lifecycle.ts';
 
 /** Candidate-neutral contracts used by profiles, targets and plugins. */
 export type GateStatus = 'PASS' | 'FAIL' | 'NOT_VALIDATED';
 export type MetricStatus = 'PASS' | 'WARN' | 'FAIL' | 'NOT_VALIDATED';
-export type ExecutionOutcome = 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'WAITING';
+export type ExecutionOutcome = 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'QUEUED' | 'RUNNING' | 'WAITING';
+export type LifecycleAction = { action: 'signal'; at: 'WAITING'; signal: EvaluationSignal } | { action: 'cancel'; at: 'QUEUED' | 'RUNNING' | 'WAITING' };
+export interface LifecycleEvent { action: 'observe' | 'signal' | 'cancel'; timestamp: string; outcome: ExecutionOutcome; signal?: EvaluationSignal; }
+export interface TargetCallOptions { signal: AbortSignal; }
 
 export interface EvaluationConfig { version?: number; name?: string; profileId?: string; targets?: string[]; gates?: string[]; metrics?: string[]; repetitions?: number; concurrency?: number[]; faults?: string[]; outputDir?: string; }
 export type ResolvedEvaluationConfig = Required<Omit<EvaluationConfig, 'outputDir'>>;
 export interface EvaluationContext { evaluationId: string; runId: string; profileId: string; targetId: string; }
 export interface TargetMetadata { id: string; displayName: string; version: string; mode: 'SIMULATED' | 'LIVE'; capabilities: string[]; adapterVersion?: string; sdkVersions?: Record<string, string>; containerImageDigests?: string[]; }
 export interface HealthResult { healthy: boolean; details: string[]; }
-export interface WorkloadDefinition { id: string; description: string; required: boolean; kind: string; }
+export interface WorkloadDefinition { id: string; description: string; required: boolean; kind: string; lifecycle?: LifecycleAction; timeoutMs?: number; pollIntervalMs?: number; }
 export interface EvaluationExecution { id: string; tenantId: string; correlationId: string; faults: string[]; cancellationRequested?: boolean; }
 export interface ExecutionHandle { executionId: string; }
 export interface EvaluationSignal { name: string; payload?: unknown; }
 export interface StepObservation { id: string; startedAt: string; endedAt: string; attempt: number; outcome: ExecutionOutcome; }
-export interface ExecutionObservation { executionId: string; tenantId: string; correlationId: string; workloadId: string; startedAt: string; endedAt: string; outcome: ExecutionOutcome; steps: StepObservation[]; attempts: number; errors: string[]; duplicateSideEffects: number | null; crossTenantLeakDetected: boolean | null; secretExposureDetected: boolean | null; identitySubstitutionAllowed: boolean | null; cancellationAffectedUnrelatedWork: boolean | null; auditTrailComplete: boolean | null; recoverySkippedSteps: boolean | null; crossRunLeakDetected?: boolean | null; }
+export interface ExecutionObservation { executionId: string; tenantId: string; correlationId: string; workloadId: string; startedAt: string; endedAt: string; outcome: ExecutionOutcome; steps: StepObservation[]; attempts: number; errors: string[]; duplicateSideEffects: number | null; crossTenantLeakDetected: boolean | null; secretExposureDetected: boolean | null; identitySubstitutionAllowed: boolean | null; cancellationAffectedUnrelatedWork: boolean | null; auditTrailComplete: boolean | null; recoverySkippedSteps: boolean | null; crossRunLeakDetected?: boolean | null; lifecycle?: LifecycleEvent[]; runtimeEvidence?: unknown; }
+/** Pending snapshots have no end time; only validated terminal observations enter results. */
+export type ExecutionSnapshot = Omit<ExecutionObservation, 'endedAt'> & { endedAt: string | null; observedAt?: string; };
 
 export interface EvaluationTarget {
   id: string;
@@ -27,9 +33,9 @@ export interface EvaluationTarget {
   setup(context: EvaluationContext): Promise<void>;
   health(): Promise<HealthResult>;
   execute(workload: WorkloadDefinition, execution: EvaluationExecution): Promise<ExecutionHandle>;
-  signal?(executionId: string, signal: EvaluationSignal): Promise<void>;
-  cancel(executionId: string): Promise<void>;
-  observe(executionId: string): Promise<ExecutionObservation>;
+  signal?(executionId: string, signal: EvaluationSignal, options?: TargetCallOptions): Promise<void>;
+  cancel(executionId: string, options?: TargetCallOptions): Promise<void>;
+  observe(executionId: string, options?: TargetCallOptions): Promise<ExecutionSnapshot>;
   teardown(context: EvaluationContext): Promise<void>;
 }
 
@@ -179,22 +185,14 @@ export class OrchevalEngine {
     for (const target of selectedTargets) {
       const metadata = await target.metadata();
       const context: EvaluationContext = { evaluationId, runId: `${evaluationId}-${target.id}`, profileId: profile.id, targetId: target.id };
-      await target.setup(context);
       try {
+        await target.setup(context);
         const health = await target.health();
         const observations: ExecutionObservation[] = [];
         if (health.healthy) for (const scenario of profile.scenarios) for (let repetition = 0; repetition < normalised.repetitions!; repetition += 1) {
-          const execution: EvaluationExecution = { id: `${context.runId}-${scenario.id}-${repetition}`, tenantId: scenario.id === 'ORCH-03' ? ['tenant-a', 'tenant-b', 'tenant-c'][repetition % 3] : 'tenant-a', correlationId: `${context.runId}-${scenario.id}-${repetition}`, faults: normalised.faults!, cancellationRequested: scenario.id === 'ORCH-07' };
+          const execution: EvaluationExecution = { id: `${context.runId}-${scenario.id}-${repetition}`, tenantId: scenario.id === 'ORCH-03' ? ['tenant-a', 'tenant-b', 'tenant-c'][repetition % 3] : 'tenant-a', correlationId: `${context.runId}-${scenario.id}-${repetition}`, faults: normalised.faults!, cancellationRequested: !scenario.lifecycle && scenario.id === 'ORCH-07' };
           const handle = await target.execute(scenario, execution);
-          const observation = await target.observe(handle.executionId);
-          if (observation.executionId !== handle.executionId || observation.tenantId !== execution.tenantId || observation.correlationId !== execution.correlationId || observation.workloadId !== scenario.id) throw new Error(`Observation identity mismatch for ${execution.id}.`);
-          const start = Date.parse(observation.startedAt);
-          const end = Date.parse(observation.endedAt);
-          if (!Number.isFinite(start) || !Number.isFinite(end) || end < start || observation.steps.some((step) => {
-            const stepStart = Date.parse(step.startedAt);
-            const stepEnd = Date.parse(step.endedAt);
-            return !Number.isFinite(stepStart) || !Number.isFinite(stepEnd) || stepStart < start || stepEnd < stepStart || stepEnd > end;
-          })) throw new Error(`Invalid observation timeline for ${execution.id}.`);
+          const observation = await completeExecution(target, scenario, execution, handle);
           observations.push(observation);
         }
         targetEvidence.push({ target: metadata, health, observations });

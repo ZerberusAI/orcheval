@@ -24,7 +24,14 @@ for (const target of targets) {
 }
 
 const engine = new OrchevalEngine({
-  profiles: [{ id: 'ai-orchestration-smoke', version: '0.1.0', scenarios: aiOrchestrationProfile.scenarios.filter(({ id }) => id === 'ORCH-01') }],
+  profiles: [
+    { id: 'ai-orchestration-smoke', version: '0.1.0', scenarios: aiOrchestrationProfile.scenarios.filter(({ id }) => id === 'ORCH-01') },
+    { id: 'ai-orchestration-lifecycle-smoke', version: '0.1.0', scenarios: aiOrchestrationProfile.scenarios.filter(({ id }) => ['ORCH-06', 'ORCH-07'].includes(id)).map((scenario) => ({ ...scenario,
+      description: scenario.id === 'ORCH-07' ? 'Cancel waiting work; queued/running cancellation and unrelated-run isolation are not exercised.' : scenario.description,
+      timeoutMs: 30_000, pollIntervalMs: 100,
+      lifecycle: scenario.id === 'ORCH-06' ? { action: 'signal', at: 'WAITING', signal: { name: 'approve', payload: { approved: true } } } : { action: 'cancel', at: 'WAITING' },
+    })) },
+  ],
   targets, gates: [securityBaselineGate], metrics: [],
 });
 const result = await engine.run({ name: 'local-docker-sdk-smoke', profileId: 'ai-orchestration-smoke', targets: ['temporal', 'inngest'], gates: ['security-baseline'], metrics: [], repetitions: 3, concurrency: [1], faults: [] });
@@ -38,8 +45,30 @@ for (const target of result.evidence.targets) {
   assert.ok(target.observations.every((observation) => observation.outcome === 'SUCCEEDED' && observation.steps.length === 5 && observation.runtimeEvidence));
 }
 
+const lifecycleResult = await engine.run({ name: 'local-docker-lifecycle-smoke', profileId: 'ai-orchestration-lifecycle-smoke', targets: ['temporal'], gates: ['security-baseline'], metrics: [], repetitions: 3, concurrency: [1], faults: [] });
+assert.equal(lifecycleResult.summary.status, 'INCOMPLETE');
+assert.equal(lifecycleResult.summary.eligible, false);
+assert.equal(lifecycleResult.gates[0].status, 'NOT_VALIDATED');
+assert.equal(lifecycleResult.evidence.targets[0].observations.length, 6);
+for (const observation of lifecycleResult.evidence.targets[0].observations) {
+  const approval = observation.workloadId === 'ORCH-06';
+  assert.equal(observation.outcome, approval ? 'SUCCEEDED' : 'CANCELLED');
+  assert.deepEqual(observation.steps.map(({ id }) => id), approval ? ['context', 'policy', 'retrieval', 'model', 'validation'] : ['context', 'policy']);
+  const events = observation.lifecycle;
+  const actionIndex = events.findIndex(({ action }) => action === (approval ? 'signal' : 'cancel'));
+  assert.ok(actionIndex > 0);
+  assert.equal(events[actionIndex - 1].action, 'observe');
+  assert.equal(events[actionIndex - 1].outcome, 'WAITING');
+  assert.equal(events.at(-1).outcome, observation.outcome);
+  const history = observation.runtimeEvidence.history.events;
+  assert.ok(history.some((event) => approval ? event.workflowExecutionSignaledEventAttributes?.signalName === 'approve' : event.workflowExecutionCancelRequestedEventAttributes));
+  assert.ok(history.some((event) => approval ? event.workflowExecutionCompletedEventAttributes : event.workflowExecutionCanceledEventAttributes));
+}
+
 await mkdir('/results', { recursive: true });
-const bundle = await writeEvaluationBundle(result, '/results');
-await copyFile('/opt/orcheval-lab/package-lock.json', `${bundle}/sdk-package-lock.json`);
-await writeFile(`${bundle}/lab-environment.json`, JSON.stringify({ sdkImageId: process.env.ORCHEVAL_SDK_IMAGE_ID, nodeImage: 'node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c', compose: await readFile(new URL('./compose.yaml', import.meta.url), 'utf8'), limitations: ['Only ORCH-01 was exercised.', 'Development services are not production security configurations.', 'Full security probes, load, recovery and version-change scenarios remain untested.', 'Inngest REST run output is empty in this dev-server version; worker output is matched to the completed runtime run id.', 'Inngest worker evidence is held in memory and does not validate recovery.'] }, null, 2));
-console.log(JSON.stringify({ bundle, status: result.summary.status, targets: result.evidence.targets.map(({ target, observations }) => ({ id: target.id, mode: target.mode, version: target.version, executions: observations.length })) }, null, 2));
+for (const evaluation of [result, lifecycleResult]) {
+  const bundle = await writeEvaluationBundle(evaluation, '/results');
+  await copyFile('/opt/orcheval-lab/package-lock.json', `${bundle}/sdk-package-lock.json`);
+  await writeFile(`${bundle}/lab-environment.json`, JSON.stringify({ sdkImageId: process.env.ORCHEVAL_SDK_IMAGE_ID, nodeImage: 'node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c', compose: await readFile(new URL('./compose.yaml', import.meta.url), 'utf8'), limitations: [evaluation === result ? 'Only ORCH-01 was exercised for Temporal and Inngest.' : 'Only Temporal approval/resume and waiting cancellation were exercised. Queued/running cancellation and unrelated-run isolation remain untested.', 'Development services are not production security configurations.', 'Full security probes, load, recovery and version-change scenarios remain untested.', 'Inngest REST run output is empty in this dev-server version; worker output is matched to the completed runtime run id.', 'Inngest worker evidence is held in memory and does not validate recovery.'] }, null, 2));
+  console.log(JSON.stringify({ bundle, status: evaluation.summary.status, targets: evaluation.evidence.targets.map(({ target, observations }) => ({ id: target.id, mode: target.mode, version: target.version, executions: observations.length })) }, null, 2));
+}

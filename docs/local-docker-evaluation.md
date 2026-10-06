@@ -12,6 +12,7 @@ exercises three repetitions per scenario:
 | `ai-orchestration-connector-smoke` | DBOS (separate run) | ORCH-01, five durable PostgreSQL-backed steps per run |
 | `ai-orchestration-connector-smoke` | BullMQ (separate run) | ORCH-01, one Redis job with five sequential application operations per run |
 | `ai-orchestration-connector-smoke` | Kestra (separate run) | ORCH-01, five authenticated built-in core task runs per flow |
+| `ai-orchestration-connector-smoke` | Prefect (separate run) | ORCH-01, five native Python task runs per self-hosted flow |
 | SDK/API fixtures only | Trigger.dev | Submission, idempotency keys, observation, rejection paths and task registration; **no live execution** |
 
 Mock application steps execute through the real runtime. This is an integration
@@ -65,6 +66,7 @@ sh infra/local-evaluation/run-provider.sh restate
 sh infra/local-evaluation/run-provider.sh dbos
 sh infra/local-evaluation/run-provider.sh bullmq
 sh infra/local-evaluation/run-provider.sh kestra
+sh infra/local-evaluation/run-provider.sh prefect
 ```
 
 Each run builds the separate connector SDK image, starts the services required by
@@ -81,8 +83,8 @@ If interrupted before cleanup, inspect the connector project first. Include the
 `tools` profile when removing it so Compose also removes the credential volume:
 
 ```bash
-docker compose -f infra/local-evaluation/providers.compose.yaml --profile hatchet --profile windmill --profile restate --profile dbos --profile bullmq --profile kestra --profile tools ps --all
-docker compose -f infra/local-evaluation/providers.compose.yaml --profile hatchet --profile windmill --profile restate --profile dbos --profile bullmq --profile kestra --profile tools down --volumes --remove-orphans
+docker compose -f infra/local-evaluation/providers.compose.yaml --profile hatchet --profile windmill --profile restate --profile dbos --profile bullmq --profile kestra --profile prefect --profile tools ps --all
+docker compose -f infra/local-evaluation/providers.compose.yaml --profile hatchet --profile windmill --profile restate --profile dbos --profile bullmq --profile kestra --profile prefect --profile tools down --volumes --remove-orphans
 ```
 
 Run the seven connector regression/contract tests without a runtime service or
@@ -156,6 +158,13 @@ task output from Kestra's dedicated task-output API. The profile reserves 2
 vCPUs and 4 GiB only while it runs, following Kestra's standalone guidance.
 It does not test cancellation, recovery, tenant isolation or security controls.
 
+The Prefect profile starts an OSS Prefect Server and a separate Python flow-client
+container within the internal Compose network. `Dockerfile.prefect` pins Python
+`3.12-slim` by digest and Prefect `3.8.7`; both the five application tasks and
+the server flow-run record are retained in each observation. The flow client runs
+locally in its own container, so this slice does not evaluate deployments,
+workers, cancellation, recovery, tenant isolation or security controls.
+
 Temporal evidence includes workflow/run identifiers and server history. Inngest
 evidence combines the server's completed run record with worker-captured step
 timings and output, matched by the runtime run id. The pinned Inngest dev server
@@ -219,4 +228,5 @@ References: [Temporal TypeScript setup](https://docs.temporal.io/develop/typescr
 [Hatchet Lite](https://docs.hatchet.run/self-hosting/hatchet-lite),
 [Windmill self-hosting](https://www.windmill.dev/docs/advanced/self_host),
 [BullMQ quick start](https://docs.bullmq.io/quick-start),
-[Kestra API guide](https://kestra.io/docs/how-to-guides/api).
+[Kestra API guide](https://kestra.io/docs/how-to-guides/api),
+[Prefect flows](https://docs.prefect.io/latest/tutorial/flows).

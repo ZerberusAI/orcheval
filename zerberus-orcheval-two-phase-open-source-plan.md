@@ -286,6 +286,14 @@ while the Docker profile is running, and mounts neither a Docker socket nor a
 host directory. Its result remains an expansion comparison, outside Phase 1
 acceptance; lifecycle, recovery, tenancy and security claims remain untested.
 
+**Prefect** now has a Docker-only self-hosted vertical slice: three ORCH-01
+flows run through a separate Python flow-client container against Prefect Server
+and execute five native Prefect tasks each. Evidence is in
+`results/local-docker/prefect-20261006T103235Z-68710/evaluation-d6fa35fd-679e-4184-893c-06f82109391c/`.
+The runner retains the completed server flow record beside task output. Its
+local flow-client execution does not establish deployment-worker, cancellation,
+recovery, tenancy or security equivalence.
+
 The original document included Trigger.dev and Windmill in its example configuration and adapter families but omitted them from its Phase 1 summary and acceptance list. Those sections now consistently include all five intended providers.
 
 ### Provider expansion and fair comparison

@@ -2,8 +2,8 @@
 set -eu
 
 case "${1:-}" in
-  hatchet|windmill|restate|dbos|bullmq|kestra) ORCHEVAL_PROVIDER=$1; export ORCHEVAL_PROVIDER ;;
-  *) printf '%s\n' 'Usage: run-provider.sh hatchet|windmill|restate|dbos|bullmq|kestra' >&2; exit 2 ;;
+  hatchet|windmill|restate|dbos|bullmq|kestra|prefect) ORCHEVAL_PROVIDER=$1; export ORCHEVAL_PROVIDER ;;
+  *) printf '%s\n' 'Usage: run-provider.sh hatchet|windmill|restate|dbos|bullmq|kestra|prefect' >&2; exit 2 ;;
 esac
 lab_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_dir=$(CDPATH= cd -- "$lab_dir/../.." && pwd)
@@ -16,6 +16,11 @@ if [ -n "$(compose ps --all --quiet)" ] || docker volume inspect orcheval-connec
 fi
 compose build evaluation
 sdk_image_id=$(docker image inspect orcheval-connectors-sdk:1 --format '{{.Id}}')
+if [ "$ORCHEVAL_PROVIDER" = prefect ]; then
+  compose build prefect-server
+  ORCHEVAL_PREFECT_IMAGE_ID=$(docker image inspect orcheval-prefect:1 --format '{{.Id}}')
+  export ORCHEVAL_PREFECT_IMAGE_ID
+fi
 run_name="orcheval-connectors-evaluation-$$"
 output_dir="$repo_dir/results/local-docker/$ORCHEVAL_PROVIDER-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 mkdir -p "$output_dir"
@@ -44,6 +49,8 @@ elif [ "$ORCHEVAL_PROVIDER" = bullmq ]; then
   compose up -d redis bullmq-service
 elif [ "$ORCHEVAL_PROVIDER" = kestra ]; then
   compose up -d kestra
+elif [ "$ORCHEVAL_PROVIDER" = prefect ]; then
+  compose up -d prefect-server prefect-service
 else
   compose up -d database windmill
 fi

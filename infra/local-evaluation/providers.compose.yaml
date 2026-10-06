@@ -13,6 +13,16 @@ x-sdk: &sdk
     - ./:/opt/orcheval-lab/src:ro
     - connector-state:/state
 
+x-prefect: &prefect
+  image: orcheval-prefect:1
+  build:
+    context: .
+    dockerfile: Dockerfile.prefect
+  init: true
+  cpus: 1.0
+  mem_limit: 1024m
+  networks: [evaluation]
+
 services:
   database:
     image: postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
@@ -135,6 +145,20 @@ services:
               username: "${ORCHEVAL_KESTRA_USERNAME:-orcheval@invalid.test}"
               password: "${ORCHEVAL_KESTRA_PASSWORD:-OrchevalLab!2026}"
 
+  prefect-server:
+    <<: *prefect
+    profiles: [prefect]
+    command: [prefect, server, start, --host, 0.0.0.0]
+
+  prefect-service:
+    <<: *prefect
+    profiles: [prefect]
+    command: [python, prefect-service.py]
+    environment:
+      PORT: "9083"
+      PREFECT_API_URL: http://prefect-server:4200/api
+    depends_on: [prefect-server]
+
   evaluation:
     <<: *sdk
     profiles: [tools]
@@ -142,6 +166,7 @@ services:
     environment:
       ORCHEVAL_PROVIDER: ${ORCHEVAL_PROVIDER:-hatchet}
       ORCHEVAL_SDK_IMAGE_ID: ${ORCHEVAL_SDK_IMAGE_ID:-unknown}
+      ORCHEVAL_PREFECT_IMAGE_ID: ${ORCHEVAL_PREFECT_IMAGE_ID:-unknown}
       HATCHET_CLIENT_HOST_PORT: hatchet:7070
       HATCHET_CLIENT_SERVER_URL: http://hatchet:8888
       HATCHET_CLIENT_TLS_STRATEGY: none
@@ -153,6 +178,7 @@ services:
       KESTRA_BASE_URL: http://kestra:8080
       KESTRA_USERNAME: ${ORCHEVAL_KESTRA_USERNAME:-orcheval@invalid.test}
       KESTRA_PASSWORD: ${ORCHEVAL_KESTRA_PASSWORD:-OrchevalLab!2026}
+      PREFECT_SERVICE_URL: http://prefect-service:9083
     volumes:
       - ./:/opt/orcheval-lab/src:ro
       - ../../:/workspace:ro

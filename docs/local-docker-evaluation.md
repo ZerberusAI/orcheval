@@ -8,6 +8,7 @@ exercises three repetitions per scenario:
 | `ai-orchestration-smoke` | Temporal, Inngest | ORCH-01 sequential execution |
 | `ai-orchestration-lifecycle-smoke` | Temporal | ORCH-06 approval/resume and the waiting-work subset of ORCH-07 cancellation |
 | `ai-orchestration-connector-smoke` | Hatchet, Windmill (separate runs) | ORCH-01, five native tasks/jobs per run |
+| `ai-orchestration-connector-smoke` | Restate (separate run) | ORCH-01, five durable TypeScript `ctx.run` steps per run |
 | SDK/API fixtures only | Trigger.dev | Submission, idempotency keys, observation, rejection paths and task registration; **no live execution** |
 
 Mock application steps execute through the real runtime. This is an integration
@@ -57,6 +58,7 @@ Run the additional providers one at a time:
 ```bash
 sh infra/local-evaluation/run-provider.sh hatchet
 sh infra/local-evaluation/run-provider.sh windmill
+sh infra/local-evaluation/run-provider.sh restate
 ```
 
 Each run builds the separate connector SDK image, starts a disposable PostgreSQL
@@ -96,7 +98,8 @@ The bundle includes the actual SDK image content id and generated
 build can resolve different transitive versions; preserve the image or use its
 exported lockfile inside Docker when reproducing an exact dependency tree.
 
-`Dockerfile.connectors` pins Hatchet SDK `1.35.1` and Trigger.dev SDK `4.7.2`.
+`Dockerfile.connectors` pins Hatchet SDK `1.35.1`, Restate SDK `1.17.2` and
+Trigger.dev SDK `4.7.2`.
 `providers.compose.yaml` pins Hatchet Lite, Windmill and PostgreSQL images by
 digest. The verified Windmill version is `CE v1.824.1-1-g18e44d3174`; Hatchet's
 runtime identity is its immutable image digest. Hatchet observations retain the
@@ -106,6 +109,16 @@ flow record and five successful module job references. Hatchet's aggregate
 `run.metadata.createdAt` as the stable submission timestamp. The raw values and
 timestamp source are retained. These timings include queue time and are not
 performance rankings.
+
+The Restate profile starts an OSS server and a separate TypeScript service in the
+same internal network. The runner registers the service through the local admin
+API, sends each request using Restate's asynchronous ingress endpoint with an
+idempotency key, and polls the documented output endpoint by Restate invocation
+ID. A service handler performs the sequential operations with five durable
+`ctx.run` calls. The connector retains its client submission timestamp for pending
+snapshots and uses the final application-step timestamp only after the invocation
+output is available. This ORCH-01 slice does not validate Restate cancellation,
+recovery, tenant isolation or security controls.
 
 Temporal evidence includes workflow/run identifiers and server history. Inngest
 evidence combines the server's completed run record with worker-captured step

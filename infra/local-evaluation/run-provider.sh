@@ -2,8 +2,8 @@
 set -eu
 
 case "${1:-}" in
-  hatchet|windmill) ORCHEVAL_PROVIDER=$1; export ORCHEVAL_PROVIDER ;;
-  *) printf '%s\n' 'Usage: run-provider.sh hatchet|windmill' >&2; exit 2 ;;
+  hatchet|windmill|restate) ORCHEVAL_PROVIDER=$1; export ORCHEVAL_PROVIDER ;;
+  *) printf '%s\n' 'Usage: run-provider.sh hatchet|windmill|restate' >&2; exit 2 ;;
 esac
 lab_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_dir=$(CDPATH= cd -- "$lab_dir/../.." && pwd)
@@ -36,6 +36,8 @@ trap 'exit 143' TERM
 
 if [ "$ORCHEVAL_PROVIDER" = hatchet ]; then
   compose up -d database hatchet hatchet-worker
+elif [ "$ORCHEVAL_PROVIDER" = restate ]; then
+  compose up -d restate restate-service
 else
   compose up -d database windmill
 fi

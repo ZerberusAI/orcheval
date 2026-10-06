@@ -8,7 +8,7 @@ import { securityBaselineGate } from '/workspace/gates/security-baseline/index.t
 import { aiOrchestrationProfile } from '/workspace/profiles/ai-orchestration/index.ts';
 
 const id = process.env.ORCHEVAL_PROVIDER;
-assert.ok(['hatchet', 'windmill', 'triggerdev'].includes(id), 'Choose an implemented provider.');
+assert.ok(['hatchet', 'windmill', 'triggerdev', 'restate'].includes(id), 'Choose an implemented provider.');
 const target = new RunnerTarget(id, id, { command: process.execPath, args: [fileURLToPath(new URL(`./${id}-runner.mjs`, import.meta.url))], timeoutMs: 15_000 });
 // Retain the last raw snapshot even if the evaluator rejects it.
 await mkdir('/results', { recursive: true });
@@ -22,7 +22,12 @@ let ready = false;
 let lastError = '';
 const readinessDeadline = Date.now() + 90_000;
 while (Date.now() < readinessDeadline) {
-  try { ready = (await target.health()).healthy; } catch (error) { lastError = error.message; }
+  try {
+    if (id === 'restate') {
+      const response = await fetch('http://restate:9070/version', { signal: AbortSignal.timeout(5_000) });
+      ready = response.ok;
+    } else ready = (await target.health()).healthy;
+  } catch (error) { lastError = error.message; }
   if (ready) break;
   await delay(1_000);
 }
@@ -46,6 +51,7 @@ for (const observation of observations) {
     assert.equal(observation.runtimeEvidence.job.flow_status.modules.length, 5);
     assert.ok(observation.runtimeEvidence.job.flow_status.modules.every((module) => module.type === 'Success'));
   }
+  if (id === 'restate') assert.equal(observation.runtimeEvidence.steps.length, 5);
 }
 const bundle = await writeEvaluationBundle(result, '/results');
 await copyFile('/opt/orcheval-lab/package-lock.json', `${bundle}/sdk-package-lock.json`);

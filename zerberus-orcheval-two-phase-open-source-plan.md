@@ -246,6 +246,26 @@ Next implementation milestone:
 3. Exercise retry/idempotency and worker failure/recovery; expand live security probes without converting missing evidence into passing assertions.
 4. Complete the remaining full-profile scenarios for all five providers before claiming Phase 1 completion.
 
+### Connector expansion track — started 2026-10-06
+
+The five original providers remain the Phase 1 acceptance set. Expansion work must
+not delay their lifecycle and security coverage, and no expansion connector may be
+counted as a Phase 1 pass. **Restate** now has the first vertical slice: three
+live ORCH-01 executions in an isolated OSS server and TypeScript service
+container. The service executes the five application operations through durable
+`ctx.run` calls; the runner preserves Restate invocation IDs, output and actual
+step timestamps. Evidence is in
+`results/local-docker/restate-20261006T092743Z-50876/evaluation-98064ccc-a39b-48b0-adc0-c3bd89a2f31a/`.
+Security, recovery, lifecycle and throughput claims remain unknown until measured.
+
+Then assess **DBOS** as the PostgreSQL-backed workflow comparison. Keep it behind
+Restate because it adds an application-side system database and has a materially
+different execution model. Add **BullMQ** only as a Redis job-queue baseline, not
+as an equivalent durable workflow implementation. Argo Workflows stays in the
+Phase 2 Kubernetes/container profile. Each expansion has a separate Docker
+compose profile, immutable image/dependency identifiers, host-independent
+reproduction command, and an explicit capability/coverage label.
+
 The original document included Trigger.dev and Windmill in its example configuration and adapter families but omitted them from its Phase 1 summary and acceptance list. Those sections now consistently include all five intended providers.
 
 ### Provider expansion and fair comparison

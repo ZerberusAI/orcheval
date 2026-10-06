@@ -74,6 +74,22 @@ services:
     depends_on:
       database: {condition: service_healthy}
 
+  restate:
+    profiles: [restate]
+    image: restatedev/restate@sha256:65abc8016d408b8b424f5e492a5da37c24573207e217a3d43242dd8b3fd8dc61
+    cpus: 1.0
+    mem_limit: 1024m
+    networks: [evaluation]
+    command: [--node-name, orcheval-restate, --advertised-host, restate, --log-format, compact]
+
+  restate-service:
+    <<: *sdk
+    profiles: [restate]
+    command: [node, src/restate-service.mjs]
+    environment:
+      PORT: "9080"
+    depends_on: [restate]
+
   evaluation:
     <<: *sdk
     profiles: [tools]
@@ -85,6 +101,8 @@ services:
       HATCHET_CLIENT_SERVER_URL: http://hatchet:8888
       HATCHET_CLIENT_TLS_STRATEGY: none
       WINDMILL_BASE_URL: http://windmill:8000
+      RESTATE_INGRESS_URL: http://restate:8080
+      RESTATE_ADMIN_URL: http://restate:9070
     volumes:
       - ./:/opt/orcheval-lab/src:ro
       - ../../:/workspace:ro

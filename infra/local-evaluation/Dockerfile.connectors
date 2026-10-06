@@ -4,6 +4,7 @@ WORKDIR /opt/orcheval-lab
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 RUN npm install --save-exact --no-audit --no-fund \
       @hatchet-dev/typescript-sdk@1.35.1 \
+      @restatedev/restate-sdk@1.17.2 \
       @trigger.dev/sdk@4.7.2 \
     && npm cache clean --force
 

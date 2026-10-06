@@ -6,10 +6,10 @@ export async function requestFromStdin() {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-export async function http(base, path, { token, body, method = body === undefined ? 'GET' : 'POST', timeoutMs = 5_000 } = {}) {
+export async function http(base, path, { token, body, headers = {}, method = body === undefined ? 'GET' : 'POST', timeoutMs = 5_000 } = {}) {
   const response = await fetch(new URL(path, base), {
     method, signal: AbortSignal.timeout(timeoutMs), redirect: 'error',
-    headers: { ...(body !== undefined ? { 'content-type': 'application/json' } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    headers: { ...(body !== undefined ? { 'content-type': 'application/json' } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   // Do not include response bodies: authentication errors can contain credentials.

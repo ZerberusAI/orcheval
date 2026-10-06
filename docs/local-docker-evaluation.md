@@ -10,6 +10,7 @@ exercises three repetitions per scenario:
 | `ai-orchestration-connector-smoke` | Hatchet, Windmill (separate runs) | ORCH-01, five native tasks/jobs per run |
 | `ai-orchestration-connector-smoke` | Restate (separate run) | ORCH-01, five durable TypeScript `ctx.run` steps per run |
 | `ai-orchestration-connector-smoke` | DBOS (separate run) | ORCH-01, five durable PostgreSQL-backed steps per run |
+| `ai-orchestration-connector-smoke` | BullMQ (separate run) | ORCH-01, one Redis job with five sequential application operations per run |
 | SDK/API fixtures only | Trigger.dev | Submission, idempotency keys, observation, rejection paths and task registration; **no live execution** |
 
 Mock application steps execute through the real runtime. This is an integration
@@ -61,6 +62,7 @@ sh infra/local-evaluation/run-provider.sh hatchet
 sh infra/local-evaluation/run-provider.sh windmill
 sh infra/local-evaluation/run-provider.sh restate
 sh infra/local-evaluation/run-provider.sh dbos
+sh infra/local-evaluation/run-provider.sh bullmq
 ```
 
 Each run builds the separate connector SDK image, starts a disposable PostgreSQL
@@ -76,8 +78,8 @@ If interrupted before cleanup, inspect the connector project first. Include the
 `tools` profile when removing it so Compose also removes the credential volume:
 
 ```bash
-docker compose -f infra/local-evaluation/providers.compose.yaml --profile hatchet --profile windmill --profile restate --profile dbos --profile tools ps --all
-docker compose -f infra/local-evaluation/providers.compose.yaml --profile hatchet --profile windmill --profile restate --profile dbos --profile tools down --volumes --remove-orphans
+docker compose -f infra/local-evaluation/providers.compose.yaml --profile hatchet --profile windmill --profile restate --profile dbos --profile bullmq --profile tools ps --all
+docker compose -f infra/local-evaluation/providers.compose.yaml --profile hatchet --profile windmill --profile restate --profile dbos --profile bullmq --profile tools down --volumes --remove-orphans
 ```
 
 Run the seven connector regression/contract tests without a runtime service or
@@ -101,7 +103,8 @@ build can resolve different transitive versions; preserve the image or use its
 exported lockfile inside Docker when reproducing an exact dependency tree.
 
 `Dockerfile.connectors` pins Hatchet SDK `1.35.1`, DBOS SDK `5.2.11`, Restate
-SDK `1.17.2` and Trigger.dev SDK `4.7.2`.
+SDK `1.17.2`, Trigger.dev SDK `4.7.2`, BullMQ `6.3.11` and its Redis transport
+`ioredis` `6.0.0`.
 `providers.compose.yaml` pins Hatchet Lite, Windmill and PostgreSQL images by
 digest. The verified Windmill version is `CE v1.824.1-1-g18e44d3174`; Hatchet's
 runtime identity is its immutable image digest. Hatchet observations retain the
@@ -131,6 +134,15 @@ The profile does not test database permissions, DBOS recovery, cancellation,
 tenant isolation, or security controls. It is a PostgreSQL-backed embedded
 workflow comparison, not a claim that it has the same topology or capabilities
 as the original five providers.
+
+The BullMQ profile starts Redis and a separate Node queue/worker service in the
+same internal network. Each ORCH-01 run creates one BullMQ job using the
+evaluation execution ID as its job ID. The worker carries out the five
+application operations in order, records progress in Redis, and returns their
+timestamps and output through the terminal job result. The runner retains the
+BullMQ state, submission, processing and completion timestamps. It does not
+claim native durable steps, cancellation, retry/recovery, tenant isolation or
+security coverage.
 
 Temporal evidence includes workflow/run identifiers and server history. Inngest
 evidence combines the server's completed run record with worker-captured step
@@ -193,4 +205,5 @@ See [Trigger.dev's Docker requirements and limitations](https://trigger.dev/docs
 References: [Temporal TypeScript setup](https://docs.temporal.io/develop/typescript/set-up-your-local-typescript),
 [Inngest Docker development](https://www.inngest.com/docs/local-development/docker),
 [Hatchet Lite](https://docs.hatchet.run/self-hosting/hatchet-lite),
-[Windmill self-hosting](https://www.windmill.dev/docs/advanced/self_host).
+[Windmill self-hosting](https://www.windmill.dev/docs/advanced/self_host),
+[BullMQ quick start](https://docs.bullmq.io/quick-start).

@@ -2,8 +2,8 @@
 set -eu
 
 case "${1:-}" in
-  hatchet|windmill|restate|dbos) ORCHEVAL_PROVIDER=$1; export ORCHEVAL_PROVIDER ;;
-  *) printf '%s\n' 'Usage: run-provider.sh hatchet|windmill|restate|dbos' >&2; exit 2 ;;
+  hatchet|windmill|restate|dbos|bullmq) ORCHEVAL_PROVIDER=$1; export ORCHEVAL_PROVIDER ;;
+  *) printf '%s\n' 'Usage: run-provider.sh hatchet|windmill|restate|dbos|bullmq' >&2; exit 2 ;;
 esac
 lab_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_dir=$(CDPATH= cd -- "$lab_dir/../.." && pwd)
@@ -40,6 +40,8 @@ elif [ "$ORCHEVAL_PROVIDER" = restate ]; then
   compose up -d restate restate-service
 elif [ "$ORCHEVAL_PROVIDER" = dbos ]; then
   compose up -d database dbos-service
+elif [ "$ORCHEVAL_PROVIDER" = bullmq ]; then
+  compose up -d redis bullmq-service
 else
   compose up -d database windmill
 fi

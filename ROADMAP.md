@@ -19,6 +19,7 @@ Completed locally:
 - [x] Trigger.dev SDK/API connector and five child tasks, verified with container-only contract fixtures
 - [x] Restate expansion connector: three isolated live ORCH-01 runs using five durable TypeScript `ctx.run` steps
 - [x] DBOS expansion connector: three isolated live ORCH-01 runs using five durable PostgreSQL-backed `DBOS.runStep` steps
+- [x] BullMQ expansion connector: three isolated live ORCH-01 runs using one Redis job and five sequential application operations
 
 Remaining before `v0.1.0`:
 
@@ -30,7 +31,8 @@ Remaining before `v0.1.0`:
 - [ ] perform release packaging and publish the first public release
 
 Provider expansion after the original five: Restate and DBOS now have initial
-live ORCH-01 slices. BullMQ is next as a separate job-queue baseline. Argo
+live ORCH-01 slices. BullMQ now has a separate job-queue-baseline integration.
+Argo
 Workflows belongs to Phase 2 container evaluation. Expansion results do not change
 the original five-provider Phase 1 acceptance criteria.
 

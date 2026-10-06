@@ -266,17 +266,22 @@ workflow ID, output and timestamps to the runner. Evidence is in
 Its application-side system database and embedded execution model remain a
 material comparison distinction from Restate and the original five providers.
 
-Add **BullMQ** next only as a Redis job-queue baseline, not as an equivalent
-durable workflow implementation. Argo Workflows stays in the Phase 2
-Kubernetes/container profile. Each expansion has a separate Docker compose
-profile, immutable image/dependency identifiers, host-independent reproduction
-command, and an explicit capability/coverage label.
+**BullMQ** now has a Redis job-queue baseline: three isolated ORCH-01 runs
+submit one queued job each, execute the five application-owned operations
+sequentially inside that job, and retain the native BullMQ job state and
+timestamps. Evidence is in
+`results/local-docker/bullmq-20261006T094243Z-56195/evaluation-40d36629-ad85-4f81-b5ff-a5726b9e54f2/`.
+It must not be described as an equivalent durable workflow implementation.
+Argo Workflows stays in the Phase 2 Kubernetes/container profile. Each
+expansion has a separate Docker compose profile, immutable image/dependency
+identifiers, host-independent reproduction command, and an explicit
+capability/coverage label.
 
 The original document included Trigger.dev and Windmill in its example configuration and adapter families but omitted them from its Phase 1 summary and acceptance list. Those sections now consistently include all five intended providers.
 
 ### Provider expansion and fair comparison
 
-After the original five, prioritise Restate (durable services, workflows and stateful objects) and DBOS (PostgreSQL-backed application workflows). Add BullMQ as a separate job-queue baseline. Keep Argo Workflows with the Phase 2 Kubernetes/container workload family; these additions are backlog candidates, not extra Phase 1 release requirements.
+After the original five, prioritise Restate (durable services, workflows and stateful objects) and DBOS (PostgreSQL-backed application workflows). BullMQ is covered as a separate job-queue baseline. Keep Argo Workflows with the Phase 2 Kubernetes/container workload family; these additions are backlog candidates, not extra Phase 1 release requirements.
 
 For every connector, record deployment mode, edition, version, native capabilities, application code required and unsupported scenarios. Evaluate the same business workload and fault assertions where applicable; a missing capability must not silently become a simulated pass. Security evidence remains unknown until the actual probe runs.
 

@@ -100,6 +100,23 @@ services:
     depends_on:
       database: {condition: service_healthy}
 
+  redis:
+    profiles: [bullmq]
+    image: redis@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+    cpus: 1.0
+    mem_limit: 512m
+    networks: [evaluation]
+    command: [redis-server, --save, '""', --appendonly, 'no']
+
+  bullmq-service:
+    <<: *sdk
+    profiles: [bullmq]
+    command: [node, src/bullmq-service.mjs]
+    environment:
+      PORT: "9082"
+      BULLMQ_REDIS_URL: redis://redis:6379
+    depends_on: [redis]
+
   evaluation:
     <<: *sdk
     profiles: [tools]
@@ -114,6 +131,7 @@ services:
       RESTATE_INGRESS_URL: http://restate:8080
       RESTATE_ADMIN_URL: http://restate:9070
       DBOS_SERVICE_URL: http://dbos-service:9081
+      BULLMQ_SERVICE_URL: http://bullmq-service:9082
     volumes:
       - ./:/opt/orcheval-lab/src:ro
       - ../../:/workspace:ro

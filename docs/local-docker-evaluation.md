@@ -11,6 +11,7 @@ exercises three repetitions per scenario:
 | `ai-orchestration-connector-smoke` | Restate (separate run) | ORCH-01, five durable TypeScript `ctx.run` steps per run |
 | `ai-orchestration-connector-smoke` | DBOS (separate run) | ORCH-01, five durable PostgreSQL-backed steps per run |
 | `ai-orchestration-connector-smoke` | BullMQ (separate run) | ORCH-01, one Redis job with five sequential application operations per run |
+| `ai-orchestration-connector-smoke` | Kestra (separate run) | ORCH-01, five authenticated built-in core task runs per flow |
 | SDK/API fixtures only | Trigger.dev | Submission, idempotency keys, observation, rejection paths and task registration; **no live execution** |
 
 Mock application steps execute through the real runtime. This is an integration
@@ -63,13 +64,15 @@ sh infra/local-evaluation/run-provider.sh windmill
 sh infra/local-evaluation/run-provider.sh restate
 sh infra/local-evaluation/run-provider.sh dbos
 sh infra/local-evaluation/run-provider.sh bullmq
+sh infra/local-evaluation/run-provider.sh kestra
 ```
 
-Each run builds the separate connector SDK image, starts a disposable PostgreSQL
-database and the selected provider, performs three ORCH-01 executions, and copies
-evidence before cleanup. The helper refuses to reuse existing connector containers
-or their credential volume. Database data is held in container tmpfs; generated
-credentials stay in a Docker volume, which is deleted on exit. Windmill uses a
+Each run builds the separate connector SDK image, starts the services required by
+the selected provider, performs three ORCH-01 executions, and copies evidence
+before cleanup. The helper refuses to reuse existing connector containers or
+their credential volume. PostgreSQL-backed profile data is held in container
+tmpfs; generated credentials stay in a Docker volume, which is deleted on exit.
+Windmill uses a
 fresh Community instance with its development bootstrap account. Its worker runs
 without privileged mode or namespace sandboxing; these runs do not test workload
 security isolation. Its five Bun scripts have no external package imports.
@@ -78,8 +81,8 @@ If interrupted before cleanup, inspect the connector project first. Include the
 `tools` profile when removing it so Compose also removes the credential volume:
 
 ```bash
-docker compose -f infra/local-evaluation/providers.compose.yaml --profile hatchet --profile windmill --profile restate --profile dbos --profile bullmq --profile tools ps --all
-docker compose -f infra/local-evaluation/providers.compose.yaml --profile hatchet --profile windmill --profile restate --profile dbos --profile bullmq --profile tools down --volumes --remove-orphans
+docker compose -f infra/local-evaluation/providers.compose.yaml --profile hatchet --profile windmill --profile restate --profile dbos --profile bullmq --profile kestra --profile tools ps --all
+docker compose -f infra/local-evaluation/providers.compose.yaml --profile hatchet --profile windmill --profile restate --profile dbos --profile bullmq --profile kestra --profile tools down --volumes --remove-orphans
 ```
 
 Run the seven connector regression/contract tests without a runtime service or
@@ -106,7 +109,7 @@ exported lockfile inside Docker when reproducing an exact dependency tree.
 SDK `1.17.2`, Trigger.dev SDK `4.7.2`, BullMQ `6.3.11` and its Redis transport
 `ioredis` `6.0.0`.
 `providers.compose.yaml` pins Hatchet Lite, Windmill and PostgreSQL images by
-digest. The verified Windmill version is `CE v1.824.1-1-g18e44d3174`; Hatchet's
+digest, along with Kestra `2.0.5`. The verified Windmill version is `CE v1.824.1-1-g18e44d3174`; Hatchet's
 runtime identity is its immutable image digest. Hatchet observations retain the
 run record, five task records and task events. Windmill observations retain the
 flow record and five successful module job references. Hatchet's aggregate
@@ -143,6 +146,15 @@ timestamps and output through the terminal job result. The runner retains the
 BullMQ state, submission, processing and completion timestamps. It does not
 claim native durable steps, cancellation, retry/recovery, tenant isolation or
 security coverage.
+
+The Kestra profile runs an OSS `2.0.5` local server with its required Basic Auth
+boundary, a lab-only credential passed only through the internal Compose
+network, and no host ports, Docker socket or host directory mount. The runner
+creates the flow through the REST API, submits execution input as multipart
+form data, then retains the native execution, five task runs, and validation
+task output from Kestra's dedicated task-output API. The profile reserves 2
+vCPUs and 4 GiB only while it runs, following Kestra's standalone guidance.
+It does not test cancellation, recovery, tenant isolation or security controls.
 
 Temporal evidence includes workflow/run identifiers and server history. Inngest
 evidence combines the server's completed run record with worker-captured step
@@ -206,4 +218,5 @@ References: [Temporal TypeScript setup](https://docs.temporal.io/develop/typescr
 [Inngest Docker development](https://www.inngest.com/docs/local-development/docker),
 [Hatchet Lite](https://docs.hatchet.run/self-hosting/hatchet-lite),
 [Windmill self-hosting](https://www.windmill.dev/docs/advanced/self_host),
-[BullMQ quick start](https://docs.bullmq.io/quick-start).
+[BullMQ quick start](https://docs.bullmq.io/quick-start),
+[Kestra API guide](https://kestra.io/docs/how-to-guides/api).

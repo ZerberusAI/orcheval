@@ -35,7 +35,7 @@ export async function respond(operation) {
     // SDK errors may carry HTTP request objects with Authorization headers.
     // Emit the bounded message only, never inspect the whole error object.
     let message = error instanceof Error ? error.message : 'Connector request failed.';
-    for (const value of [process.env.TRIGGER_SECRET_KEY, process.env.HATCHET_CLIENT_TOKEN]) {
+    for (const value of [process.env.TRIGGER_SECRET_KEY, process.env.HATCHET_CLIENT_TOKEN, process.env.KESTRA_PASSWORD]) {
       if (value) message = message.replaceAll(value, '[redacted]');
     }
     process.stderr.write(`${message.replace(/Bearer\s+\S+/gi, 'Bearer [redacted]').slice(0, 2_000)}\n`);

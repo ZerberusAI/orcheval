@@ -8,7 +8,7 @@ import { securityBaselineGate } from '/workspace/gates/security-baseline/index.t
 import { aiOrchestrationProfile } from '/workspace/profiles/ai-orchestration/index.ts';
 
 const id = process.env.ORCHEVAL_PROVIDER;
-assert.ok(['hatchet', 'windmill', 'triggerdev', 'restate', 'dbos', 'bullmq'].includes(id), 'Choose an implemented provider.');
+assert.ok(['hatchet', 'windmill', 'triggerdev', 'restate', 'dbos', 'bullmq', 'kestra'].includes(id), 'Choose an implemented provider.');
 const target = new RunnerTarget(id, id, { command: process.execPath, args: [fileURLToPath(new URL(`./${id}-runner.mjs`, import.meta.url))], timeoutMs: 15_000 });
 // Retain the last raw snapshot even if the evaluator rejects it.
 await mkdir('/results', { recursive: true });
@@ -56,6 +56,10 @@ for (const observation of observations) {
   if (id === 'bullmq') {
     assert.equal(observation.runtimeEvidence.job.state, 'completed');
     assert.equal(observation.runtimeEvidence.steps.length, 5);
+  }
+  if (id === 'kestra') {
+    assert.equal(observation.runtimeEvidence.execution.state.current, 'SUCCESS');
+    assert.equal(observation.runtimeEvidence.taskRuns.length, 5);
   }
 }
 const bundle = await writeEvaluationBundle(result, '/results');

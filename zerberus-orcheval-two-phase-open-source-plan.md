@@ -277,6 +277,15 @@ expansion has a separate Docker compose profile, immutable image/dependency
 identifiers, host-independent reproduction command, and an explicit
 capability/coverage label.
 
+**Kestra** now has an isolated REST-API vertical slice: three ORCH-01 flows use
+five built-in core `debug.Return` tasks and retain authenticated execution,
+task-run and task-output records. Evidence is in
+`results/local-docker/kestra-20261006T101837Z-64688/evaluation-1a046459-591a-4eaa-a9e7-4bb611e2c1f1/`.
+The lab reserves the documented standalone minimum of 2 vCPUs and 4 GiB only
+while the Docker profile is running, and mounts neither a Docker socket nor a
+host directory. Its result remains an expansion comparison, outside Phase 1
+acceptance; lifecycle, recovery, tenancy and security claims remain untested.
+
 The original document included Trigger.dev and Windmill in its example configuration and adapter families but omitted them from its Phase 1 summary and acceptance list. Those sections now consistently include all five intended providers.
 
 ### Provider expansion and fair comparison

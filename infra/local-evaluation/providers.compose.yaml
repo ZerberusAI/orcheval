@@ -117,6 +117,24 @@ services:
       BULLMQ_REDIS_URL: redis://redis:6379
     depends_on: [redis]
 
+  kestra:
+    profiles: [kestra]
+    image: kestra/kestra@sha256:bcb1bc921e93f83bf1e3704f6c912ae57fdb327d712e19d9061cc1e8c8fda526
+    init: true
+    cpus: 2.0
+    mem_limit: 4g
+    networks: [evaluation]
+    command: [server, local]
+    environment:
+      ORCHEVAL_KESTRA_USERNAME: ${ORCHEVAL_KESTRA_USERNAME:-orcheval@invalid.test}
+      ORCHEVAL_KESTRA_PASSWORD: ${ORCHEVAL_KESTRA_PASSWORD:-OrchevalLab!2026}
+      KESTRA_CONFIGURATION: |
+        kestra:
+          server:
+            basic-auth:
+              username: "${ORCHEVAL_KESTRA_USERNAME:-orcheval@invalid.test}"
+              password: "${ORCHEVAL_KESTRA_PASSWORD:-OrchevalLab!2026}"
+
   evaluation:
     <<: *sdk
     profiles: [tools]
@@ -132,6 +150,9 @@ services:
       RESTATE_ADMIN_URL: http://restate:9070
       DBOS_SERVICE_URL: http://dbos-service:9081
       BULLMQ_SERVICE_URL: http://bullmq-service:9082
+      KESTRA_BASE_URL: http://kestra:8080
+      KESTRA_USERNAME: ${ORCHEVAL_KESTRA_USERNAME:-orcheval@invalid.test}
+      KESTRA_PASSWORD: ${ORCHEVAL_KESTRA_PASSWORD:-OrchevalLab!2026}
     volumes:
       - ./:/opt/orcheval-lab/src:ro
       - ../../:/workspace:ro

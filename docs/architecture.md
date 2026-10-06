@@ -20,6 +20,6 @@ admissibility; a mandatory `NOT_VALIDATED` produces an incomplete result and als
 suppresses admissibility.
 
 The initial bundled targets are local contract simulators. The same
-`EvaluationTarget` contract will be used by live Hatchet, Temporal and Inngest
+`EvaluationTarget` contract is used by Temporal, Inngest, Hatchet, Trigger.dev and Windmill
 adapters, but a simulated target is always labelled `SIMULATED` in evidence and
 never produces a passing security-baseline result.

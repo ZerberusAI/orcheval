@@ -1,0 +1,96 @@
+name: orcheval-connectors
+
+x-sdk: &sdk
+  image: orcheval-connectors-sdk:1
+  build:
+    context: .
+    dockerfile: Dockerfile.connectors
+  init: true
+  cpus: 1.0
+  mem_limit: 768m
+  networks: [evaluation]
+  volumes:
+    - ./:/opt/orcheval-lab/src:ro
+    - connector-state:/state
+
+services:
+  database:
+    image: postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    cpus: 1.0
+    mem_limit: 768m
+    environment:
+      POSTGRES_PASSWORD: disposable-orcheval-lab
+      POSTGRES_DB: ${ORCHEVAL_PROVIDER:-hatchet}
+    tmpfs: [/var/lib/postgresql/data]
+    networks: [evaluation]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  hatchet:
+    profiles: [hatchet]
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-lite@sha256:cc81f078a5285d7d2051ec4a4fa459d033e1face4ca5983d82612b00da6e3fa3
+    cpus: 1.0
+    mem_limit: 1536m
+    networks: [evaluation]
+    environment:
+      DATABASE_URL: postgres://postgres:disposable-orcheval-lab@database:5432/hatchet?sslmode=disable
+      SERVER_GRPC_BIND_ADDRESS: 0.0.0.0
+      SERVER_GRPC_BROADCAST_ADDRESS: hatchet:7070
+      SERVER_GRPC_INSECURE: "true"
+      SERVER_URL: http://hatchet:8888
+      SERVER_AUTH_COOKIE_INSECURE: "true"
+      SERVER_AUTH_COOKIE_DOMAIN: hatchet
+    command: [sh, -ec, "./hatchet-migrate; ./hatchet-admin quickstart --skip certs --generated-config-dir /config; umask 077; ./hatchet-admin token create --config /config --name orcheval-lab > /state/hatchet-token; exec ./hatchet-lite --config /config"]
+    volumes: [connector-state:/state]
+    depends_on:
+      database: {condition: service_healthy}
+
+  hatchet-worker:
+    <<: *sdk
+    profiles: [hatchet]
+    command: [node, src/hatchet-worker.mjs]
+    environment:
+      HATCHET_CLIENT_HOST_PORT: hatchet:7070
+      HATCHET_CLIENT_SERVER_URL: http://hatchet:8888
+      HATCHET_CLIENT_TLS_STRATEGY: none
+    depends_on: [hatchet]
+
+  windmill:
+    profiles: [windmill]
+    image: ghcr.io/windmill-labs/windmill@sha256:4bc925d3170e4b5b9fc9fedb6b5f7252514507d9d028f78482ba4356b12bd7a1
+    cpus: 1.0
+    mem_limit: 1536m
+    networks: [evaluation]
+    environment:
+      DATABASE_URL: postgres://postgres:disposable-orcheval-lab@database:5432/windmill?sslmode=disable
+      MODE: standalone
+      DISABLE_NSJAIL: "true"
+      DISABLE_NUSER: "true"
+      NUM_WORKERS: "1"
+      BASE_URL: http://windmill:8000
+    depends_on:
+      database: {condition: service_healthy}
+
+  evaluation:
+    <<: *sdk
+    profiles: [tools]
+    command: [node, --experimental-strip-types, src/provider-smoke.mjs]
+    environment:
+      ORCHEVAL_PROVIDER: ${ORCHEVAL_PROVIDER:-hatchet}
+      ORCHEVAL_SDK_IMAGE_ID: ${ORCHEVAL_SDK_IMAGE_ID:-unknown}
+      HATCHET_CLIENT_HOST_PORT: hatchet:7070
+      HATCHET_CLIENT_SERVER_URL: http://hatchet:8888
+      HATCHET_CLIENT_TLS_STRATEGY: none
+      WINDMILL_BASE_URL: http://windmill:8000
+    volumes:
+      - ./:/opt/orcheval-lab/src:ro
+      - ../../:/workspace:ro
+      - connector-state:/state
+
+networks:
+  evaluation: {internal: true}
+volumes:
+  connector-state:

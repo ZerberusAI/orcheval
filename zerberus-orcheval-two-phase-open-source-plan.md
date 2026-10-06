@@ -181,7 +181,7 @@ Finalised Phase 1 scope:
 - public OSS repository and governance baseline;
 - core evaluation engine and contracts;
 - one official workload profile: `ai-orchestration`;
-- official reference adapters: Hatchet, Temporal, Inngest;
+- official reference adapters: Temporal, Inngest, Hatchet, Trigger.dev and Windmill;
 - additional adapters may be added after `v0.1`, but they are not mandatory for the first release;
 - security gate pack: `security-baseline`;
 - evidence collection and reproducible result bundles;
@@ -190,7 +190,7 @@ Finalised Phase 1 scope:
 
 Phase 1 proves the architecture and the evidence model. It must **not** attempt to support every workload/runtime category before the core is validated.
 
-## Execution status — 2026-10-05
+## Execution status — 2026-10-06
 
 Work is local on `feature/Phase1-Evaluations`. The requested branch name contained a space, which Git does not allow. No remote deployment or Git pull is part of this execution plan.
 
@@ -200,28 +200,63 @@ Work is local on `feature/Phase1-Evaluations`. The requested branch name contain
 | 2. Evidence and execution lifecycle | Foundation implemented | Per-target mandatory gates, nullable security assertions, identity/timestamp validation, nonterminal snapshots, bounded polling, abortable runner calls and recorded lifecycle actions. Full-profile fault/load orchestration remains. |
 | 3. Temporal sequential vertical slice | Complete locally | Three real ORCH-01 executions, five activities each, through the Node SDK in Docker; workflow histories captured. |
 | 4. Temporal full scenario coverage | In progress | ORCH-06 approval/resume and the waiting-work subset of ORCH-07 pass three real executions each, with signal/cancel/terminal history assertions. Queued/running cancellation, unrelated-run effects, parallelism, retries, recovery and tenant/load/context/version scenarios remain. |
-| 5. Inngest and Hatchet parity | In progress | Three real Inngest ORCH-01 executions, five steps each, in Docker; Hatchet live evaluation has not started. |
+| 5. Five-provider integration and parity | In progress | Temporal, Inngest, Hatchet and Windmill have live ORCH-01 evidence. Hatchet and Windmill each pass three executions with five native tasks/jobs. Trigger.dev's connector and task definitions pass SDK/API fixture checks; its live environment remains pending. Lifecycle, fault and security parity across providers remains. |
 | 6. Metrics, documentation and release | Pending | Full-profile security probes, measured load, comparable metrics, verified example bundles and release packaging remain. |
 
 Initial checkpoint `3455ba2`: 29 tests passed; TypeScript build and lint passed. Its Docker evidence is under `results/local-docker/20261005T150928Z-79039/evaluation-40f4f30f-733a-4782-8fa0-41f44bd05933/` (ignored local output).
 
 Lifecycle milestone validation: **39 tests**, TypeScript build and lint pass, plus **one Docker-only regression test** for Inngest's completed status arriving before its end timestamp. The runner now waits under its existing deadline and retains intermediate records instead of manufacturing an end time. Real integration checks passed **12 executions**: three ORCH-01 runs for each runtime, three Temporal approval/resume runs and three Temporal waiting cancellations.
 
-Latest evidence is under `results/local-docker/20261005T154350Z-88746/`:
+Temporal/Inngest lifecycle evidence is under `results/local-docker/20261005T154350Z-88746/`:
 
 - `evaluation-334987e3-afcc-49a7-b3d7-ad261d1b80b1/`: sequential profile, both runtimes.
 - `evaluation-fc77439d-e760-4335-abfb-d0e9dc36de02/`: Temporal lifecycle profile, including engine action logs and server histories.
 
 Both reports remain **INCOMPLETE**: security assertions were not exercised and remain **NOT_VALIDATED**. Waiting cancellation alone does not validate SEC-005, unrelated-run isolation or the full ORCH-07 scenario. The restricted lab profiles are separate from full Phase 1 acceptance.
 
+Connector milestone, 2026-10-06:
+
+| Provider | Implemented / verified | Outstanding |
+| --- | --- | --- |
+| Temporal | Live ORCH-01, ORCH-06, waiting subset of ORCH-07 | Remaining scenarios and security probes |
+| Inngest | Live ORCH-01 | Lifecycle and remaining scenarios/security |
+| Hatchet | Node SDK worker; five native DAG tasks; three live ORCH-01 runs | Lifecycle and remaining scenarios/security |
+| Windmill | REST runner; five native Bun flow modules; three live ORCH-01 runs | Lifecycle and remaining scenarios/security |
+| Trigger.dev | SDK runner, root plus five native child task definitions; SDK/API fixture validation | Live provisioning, task registration/execution, then remaining scenarios/security |
+
+New live evidence (ignored local output):
+
+- Hatchet: `results/local-docker/hatchet-20261006T091219Z-47890/evaluation-341ebeb2-f02e-4e06-b4b5-2de19a2b7fb3/`.
+- Windmill: `results/local-docker/windmill-20261006T091233Z-47864/evaluation-cbd13459-3523-4f79-b653-a9c3ea1b970e/`.
+
+Both new reports are **INCOMPLETE / NOT_VALIDATED** because the security probes have not run. Hatchet captures run/task/event records; Windmill captures the flow and five successful module jobs. All new connectors reject workloads outside ORCH-01. Seven Docker-only checks cover the Hatchet submission-timestamp regression and Trigger.dev's real SDK against controlled API fixtures, including idempotency-key separation, pending/terminal states, malformed/foreign records and all six task registrations. Fixture success is not live Trigger.dev evidence.
+
+Pinned dependencies: Hatchet SDK `1.35.1`, Trigger.dev SDK `4.7.2`, and immutable Node/PostgreSQL/Hatchet/Windmill image digests. Verified Windmill reports `CE v1.824.1-1-g18e44d3174`. Each live bundle includes the actual SDK image id and generated lockfile. New labs run independently with automatic teardown and no writable host mounts.
+
+Validation: all **39 framework tests** pass (the full-profile simulator test now covers all five providers), along with TypeScript build/lint and **seven Docker connector checks**. The host `package.json`, `package-lock.json` and aggregate `node_modules` content hashes match the pre-work baseline. Provider containers, credential volumes and networks were removed after validation; downloaded images/build cache remain in Docker.
+
+Trigger.dev live setup is pending an isolated Docker host/VM with sufficient capacity and a bootstrapped project/worker. The current Docker allocation is about 7.65 GiB; the documented minimums are 6 GB for its webapp stack and 8 GB for its worker stack. Its worker manages task containers through a Docker socket proxy. Preserve the workstation's Docker settings and socket boundary; run that stack in a dedicated environment. See [Trigger.dev Docker requirements](https://trigger.dev/docs/self-hosting/docker). No live or checkpoint-parity claim is made for this connector.
+
 Environment boundary: all vendor SDKs and npm downloads remain inside the dedicated Docker image. Repository mounts are read-only during evaluation; the host package manifest, lockfile and installed dependencies remain unchanged. The isolated Compose project publishes no host ports. Its containers and network were removed after the run; downloaded images/build cache remain in Docker. See `docs/local-docker-evaluation.md` for reproduction and cleanup.
 
 Next implementation milestone:
 
-1. Add independently observed queued and running cancellation variants, with an unrelated control execution to verify cancellation scope.
-2. Extend Inngest to the same approval/resume and cancellation contract, using runtime evidence to establish that the wait is registered before sending an event.
-3. Exercise retry/idempotency and worker failure/recovery; expand the live security probes without converting missing evidence into passing assertions.
-4. Add Hatchet and the remaining full-profile scenarios before enabling comparative metrics or claiming Phase 1 completion.
+1. Provision the isolated Trigger.dev environment, register the six task definitions and capture three real ORCH-01 runs. Retain the distinction between its completed SDK/API checks and pending live validation.
+2. Add independently observed queued and running cancellation variants, with an unrelated control execution; bring all five providers to equivalent approval/resume and cancellation coverage.
+3. Exercise retry/idempotency and worker failure/recovery; expand live security probes without converting missing evidence into passing assertions.
+4. Complete the remaining full-profile scenarios for all five providers before claiming Phase 1 completion.
+
+The original document included Trigger.dev and Windmill in its example configuration and adapter families but omitted them from its Phase 1 summary and acceptance list. Those sections now consistently include all five intended providers.
+
+### Provider expansion and fair comparison
+
+After the original five, prioritise Restate (durable services, workflows and stateful objects) and DBOS (PostgreSQL-backed application workflows). Add BullMQ as a separate job-queue baseline. Keep Argo Workflows with the Phase 2 Kubernetes/container workload family; these additions are backlog candidates, not extra Phase 1 release requirements.
+
+For every connector, record deployment mode, edition, version, native capabilities, application code required and unsupported scenarios. Evaluate the same business workload and fault assertions where applicable; a missing capability must not silently become a simulated pass. Security evidence remains unknown until the actual probe runs.
+
+Trigger.dev self-hosting currently excludes checkpoint support, and Windmill reserves custom approval permissions for Cloud/Enterprise editions. Capture these distinctions in evidence instead of treating a local Community deployment as equivalent to a managed deployment. Sources: [Trigger.dev self-hosting](https://trigger.dev/docs/self-hosting/docker), [Windmill approvals](https://www.windmill.dev/docs/flows/flow_approval).
+
+All package installations remain inside Docker. Run provider labs independently to bound memory use; preserve the host dependency manifests, existing repositories and Docker global settings. Do not mount the host Docker socket into a provider or worker container.
 
 Lifecycle scope: polling is bounded after `execute` returns; runner setup/execute/teardown retain their per-call deadlines. In-process adapters must cooperate with abort signals and clean up in teardown. The engine cannot forcibly stop arbitrary in-process adapter code. No host npm install, remote deployment or Git pull was performed for either milestone.
 
@@ -801,7 +836,7 @@ Phase 1 is complete when:
 - OSS governance/security files exist;
 - the framework installs locally;
 - the core contracts are stable enough for external adapters;
-- the official reference adapters (Hatchet, Temporal, Inngest) execute through one common API;
+- the official reference adapters (Temporal, Inngest, Hatchet, Trigger.dev, Windmill) execute through one common API;
 - the `ai-orchestration` profile executes consistently across those targets;
 - mandatory security gates execute independently from optional scoring;
 - common telemetry is captured;
@@ -1293,7 +1328,7 @@ Security gate engine
         ↓
 AI orchestration profile
         ↓
-Reference adapters: Hatchet + Temporal + Inngest
+Reference adapters: Temporal + Inngest + Hatchet + Trigger.dev + Windmill
         ↓
 Metric plugins: latency, throughput, burst, traceability
         ↓

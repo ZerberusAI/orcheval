@@ -73,6 +73,8 @@ export const referenceAdapters: EvaluationTarget[] = [
   referenceAdapter('hatchet', 'Hatchet'),
   referenceAdapter('temporal', 'Temporal'),
   referenceAdapter('inngest', 'Inngest'),
+  referenceAdapter('triggerdev', 'Trigger.dev'),
+  referenceAdapter('windmill', 'Windmill'),
 ];
 
 export const adapters = referenceAdapters.map((adapter) => adapter.id);

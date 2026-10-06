@@ -92,5 +92,9 @@ a live runner is configured; neither the lab nor those simulators provide full
 ORCH-07 or SEC-005 coverage.
 
 A configured runner is marked `LIVE`; absent configuration retains the deterministic
-local simulator. The runner is the boundary where an official Temporal, Hatchet, or
-Inngest SDK implementation belongs.
+local simulator. The runner is the boundary for vendor SDK/API implementations.
+The five reference ids are `temporal`, `inngest`, `hatchet`, `triggerdev` and
+`windmill`; for example, Trigger.dev uses `ORCHEVAL_TRIGGERDEV_RUNNER` and
+`ORCHEVAL_TRIGGERDEV_RUNNER_ARGS`. Configuring a runner does not establish that
+its runtime has passed integration or security checks. See the
+[Docker coverage table](local-docker-evaluation.md) for verified coverage.

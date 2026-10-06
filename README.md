@@ -18,7 +18,7 @@ Phase 1 focuses on the orchestration/evaluation core and a credible v0.1 release
 - public OSS repository and governance baseline;
 - core contracts and evaluation engine;
 - official profile: `ai-orchestration`;
-- reference adapters: Hatchet, Temporal, Inngest;
+- reference adapters: Temporal, Inngest, Hatchet, Trigger.dev and Windmill;
 - security gate pack: `security-baseline`;
 - evidence capture and reproducible result bundles;
 - CLI-driven evaluation and reporting.
@@ -27,17 +27,19 @@ Phase 1 focuses on the orchestration/evaluation core and a credible v0.1 release
 
 The repository now provides the Phase 1 contracts, the complete `ai-orchestration`
 scenario set, evidence/result bundles, a security-baseline gate, and local CLI
-execution. The bundled Hatchet, Temporal and Inngest targets are deterministic
-contract simulators. They exercise the framework locally but deliberately produce
-`NOT_VALIDATED` mandatory-gate results, so they cannot be interpreted as vendor
-validation or a benchmark. Live target adapters and their integration environments
-are the next Phase 1 delivery item.
+execution. All five reference targets default to deterministic contract
+simulators unless a live runner is configured. The simulators exercise the
+framework locally but deliberately produce `NOT_VALIDATED` mandatory-gate results,
+so they cannot be interpreted as vendor
+validation or a benchmark. Full-profile live validation remains in progress.
 
 An isolated [Docker smoke lab](docs/local-docker-evaluation.md) now executes the
-sequential scenario through real Temporal and Inngest SDKs. Dependencies are
-installed only inside Docker; the host package manifest and dependencies are
-unchanged. The lab covers ORCH-01 for both runtimes, plus Temporal approval/resume
-and waiting cancellation. Security gates remain `NOT_VALIDATED`.
+sequential scenario through real Temporal, Inngest, Hatchet and Windmill runtimes.
+Dependencies are installed only inside Docker; the host package manifest and
+dependencies are unchanged. The lab covers ORCH-01 for those four runtimes, plus
+Temporal approval/resume and waiting cancellation. Trigger.dev has a connector and native task definitions
+validated against SDK/API fixtures; its live environment is still pending.
+Security gates remain `NOT_VALIDATED` for every provider.
 
 ## Phase 2 scope
 

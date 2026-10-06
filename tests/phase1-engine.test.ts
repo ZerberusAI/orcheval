@@ -9,7 +9,7 @@ import { phaseOneDependencies } from '../packages/harness/index.ts';
 test('Phase 1 engine executes every profile scenario but does not claim simulated targets are admissible', async () => {
   const config: EvaluationConfig = {
     profileId: 'ai-orchestration',
-    targets: ['temporal', 'hatchet', 'inngest'],
+    targets: ['temporal', 'hatchet', 'inngest', 'triggerdev', 'windmill'],
     gates: ['security-baseline'],
     metrics: ['latency', 'throughput', 'traceability'],
     repetitions: 2,
@@ -20,11 +20,11 @@ test('Phase 1 engine executes every profile scenario but does not claim simulate
   assert.equal(result.profileId, 'ai-orchestration');
   assert.equal(result.summary.status, 'INCOMPLETE');
   assert.equal(result.summary.eligible, false);
-  assert.equal(result.gates.length, 3);
+  assert.equal(result.gates.length, config.targets!.length);
   assert.deepEqual(result.gates.map(({ targetId }) => targetId), config.targets);
-  assert.equal(result.gates[0].status, 'NOT_VALIDATED');
+  assert.ok(result.gates.every(({ status }) => status === 'NOT_VALIDATED'));
   assert.equal(result.metrics.length, 3);
-  assert.equal(result.evidence.targets.length, 3);
+  assert.equal(result.evidence.targets.length, config.targets!.length);
   assert.equal(result.evidence.targets[0].observations.length, 20);
 });
 

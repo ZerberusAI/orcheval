@@ -10,6 +10,8 @@ targets:
   - temporal
   - hatchet
   - inngest
+  - triggerdev
+  - windmill
 
 gates:
   security-baseline:

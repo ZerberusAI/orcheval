@@ -18,6 +18,7 @@ Completed locally:
 - [x] isolated Hatchet and Windmill ORCH-01 connectors, three real executions each with native task/job evidence
 - [x] Trigger.dev SDK/API connector and five child tasks, verified with container-only contract fixtures
 - [x] Restate expansion connector: three isolated live ORCH-01 runs using five durable TypeScript `ctx.run` steps
+- [x] DBOS expansion connector: three isolated live ORCH-01 runs using five durable PostgreSQL-backed `DBOS.runStep` steps
 
 Remaining before `v0.1.0`:
 
@@ -28,10 +29,10 @@ Remaining before `v0.1.0`:
 - [ ] collect live evidence for all security assertions and publish verified example bundles
 - [ ] perform release packaging and publish the first public release
 
-Provider expansion after the original five: Restate and DBOS, with BullMQ as a
-separate job-queue baseline. Restate's initial ORCH-01 slice is complete; DBOS is
-next. Argo Workflows belongs to Phase 2 container evaluation. Expansion results
-do not change the original five-provider Phase 1 acceptance criteria.
+Provider expansion after the original five: Restate and DBOS now have initial
+live ORCH-01 slices. BullMQ is next as a separate job-queue baseline. Argo
+Workflows belongs to Phase 2 container evaluation. Expansion results do not change
+the original five-provider Phase 1 acceptance criteria.
 
 ## Phase 2 — v1.0.0
 

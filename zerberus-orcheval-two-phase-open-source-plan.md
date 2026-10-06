@@ -258,13 +258,19 @@ step timestamps. Evidence is in
 `results/local-docker/restate-20261006T092743Z-50876/evaluation-98064ccc-a39b-48b0-adc0-c3bd89a2f31a/`.
 Security, recovery, lifecycle and throughput claims remain unknown until measured.
 
-Then assess **DBOS** as the PostgreSQL-backed workflow comparison. Keep it behind
-Restate because it adds an application-side system database and has a materially
-different execution model. Add **BullMQ** only as a Redis job-queue baseline, not
-as an equivalent durable workflow implementation. Argo Workflows stays in the
-Phase 2 Kubernetes/container profile. Each expansion has a separate Docker
-compose profile, immutable image/dependency identifiers, host-independent
-reproduction command, and an explicit capability/coverage label.
+**DBOS** now has the corresponding PostgreSQL-backed vertical slice: three live
+ORCH-01 executions against a disposable system database. The embedded TypeScript
+executor runs the same five durable steps and exposes its DBOS workflow status,
+workflow ID, output and timestamps to the runner. Evidence is in
+`results/local-docker/dbos-20261006T093302Z-53159/evaluation-cbeab11f-d860-4e6e-a9cb-f63f637ec6be/`.
+Its application-side system database and embedded execution model remain a
+material comparison distinction from Restate and the original five providers.
+
+Add **BullMQ** next only as a Redis job-queue baseline, not as an equivalent
+durable workflow implementation. Argo Workflows stays in the Phase 2
+Kubernetes/container profile. Each expansion has a separate Docker compose
+profile, immutable image/dependency identifiers, host-independent reproduction
+command, and an explicit capability/coverage label.
 
 The original document included Trigger.dev and Windmill in its example configuration and adapter families but omitted them from its Phase 1 summary and acceptance list. Those sections now consistently include all five intended providers.
 

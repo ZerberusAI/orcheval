@@ -90,6 +90,16 @@ services:
       PORT: "9080"
     depends_on: [restate]
 
+  dbos-service:
+    <<: *sdk
+    profiles: [dbos]
+    command: [node, src/dbos-service.mjs]
+    environment:
+      PORT: "9081"
+      DBOS_SYSTEM_DATABASE_URL: postgres://postgres:disposable-orcheval-lab@database:5432/dbos
+    depends_on:
+      database: {condition: service_healthy}
+
   evaluation:
     <<: *sdk
     profiles: [tools]
@@ -103,6 +113,7 @@ services:
       WINDMILL_BASE_URL: http://windmill:8000
       RESTATE_INGRESS_URL: http://restate:8080
       RESTATE_ADMIN_URL: http://restate:9070
+      DBOS_SERVICE_URL: http://dbos-service:9081
     volumes:
       - ./:/opt/orcheval-lab/src:ro
       - ../../:/workspace:ro

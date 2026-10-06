@@ -9,6 +9,7 @@ exercises three repetitions per scenario:
 | `ai-orchestration-lifecycle-smoke` | Temporal | ORCH-06 approval/resume and the waiting-work subset of ORCH-07 cancellation |
 | `ai-orchestration-connector-smoke` | Hatchet, Windmill (separate runs) | ORCH-01, five native tasks/jobs per run |
 | `ai-orchestration-connector-smoke` | Restate (separate run) | ORCH-01, five durable TypeScript `ctx.run` steps per run |
+| `ai-orchestration-connector-smoke` | DBOS (separate run) | ORCH-01, five durable PostgreSQL-backed steps per run |
 | SDK/API fixtures only | Trigger.dev | Submission, idempotency keys, observation, rejection paths and task registration; **no live execution** |
 
 Mock application steps execute through the real runtime. This is an integration
@@ -59,6 +60,7 @@ Run the additional providers one at a time:
 sh infra/local-evaluation/run-provider.sh hatchet
 sh infra/local-evaluation/run-provider.sh windmill
 sh infra/local-evaluation/run-provider.sh restate
+sh infra/local-evaluation/run-provider.sh dbos
 ```
 
 Each run builds the separate connector SDK image, starts a disposable PostgreSQL
@@ -74,8 +76,8 @@ If interrupted before cleanup, inspect the connector project first. Include the
 `tools` profile when removing it so Compose also removes the credential volume:
 
 ```bash
-docker compose -f infra/local-evaluation/providers.compose.yaml --profile hatchet --profile windmill --profile tools ps --all
-docker compose -f infra/local-evaluation/providers.compose.yaml --profile hatchet --profile windmill --profile tools down --volumes --remove-orphans
+docker compose -f infra/local-evaluation/providers.compose.yaml --profile hatchet --profile windmill --profile restate --profile dbos --profile tools ps --all
+docker compose -f infra/local-evaluation/providers.compose.yaml --profile hatchet --profile windmill --profile restate --profile dbos --profile tools down --volumes --remove-orphans
 ```
 
 Run the seven connector regression/contract tests without a runtime service or
@@ -98,8 +100,8 @@ The bundle includes the actual SDK image content id and generated
 build can resolve different transitive versions; preserve the image or use its
 exported lockfile inside Docker when reproducing an exact dependency tree.
 
-`Dockerfile.connectors` pins Hatchet SDK `1.35.1`, Restate SDK `1.17.2` and
-Trigger.dev SDK `4.7.2`.
+`Dockerfile.connectors` pins Hatchet SDK `1.35.1`, DBOS SDK `5.2.11`, Restate
+SDK `1.17.2` and Trigger.dev SDK `4.7.2`.
 `providers.compose.yaml` pins Hatchet Lite, Windmill and PostgreSQL images by
 digest. The verified Windmill version is `CE v1.824.1-1-g18e44d3174`; Hatchet's
 runtime identity is its immutable image digest. Hatchet observations retain the
@@ -119,6 +121,16 @@ ID. A service handler performs the sequential operations with five durable
 snapshots and uses the final application-step timestamp only after the invocation
 output is available. This ORCH-01 slice does not validate Restate cancellation,
 recovery, tenant isolation or security controls.
+
+The DBOS profile starts a separate Node executor against the disposable
+PostgreSQL service used only for that run. DBOS creates and migrates its own
+system schema during launch, then runs the five application operations using
+`DBOS.runStep`. The runner starts a workflow with the evaluation execution ID,
+reads DBOS workflow status, and accepts a terminal observation only for `SUCCESS`.
+The profile does not test database permissions, DBOS recovery, cancellation,
+tenant isolation, or security controls. It is a PostgreSQL-backed embedded
+workflow comparison, not a claim that it has the same topology or capabilities
+as the original five providers.
 
 Temporal evidence includes workflow/run identifiers and server history. Inngest
 evidence combines the server's completed run record with worker-captured step

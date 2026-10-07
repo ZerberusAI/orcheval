@@ -8,6 +8,7 @@ Orcheval uses YAML-driven evaluation definition files to describe:
 - metric configuration;
 - load and fault characteristics;
 - repetition counts.
+- deterministic seed and warm-up policy.
 
 The framework resolves this configuration into a reproducible run with immutable output artifacts.
 
@@ -22,10 +23,18 @@ comparison and Markdown report.
 
 `config.resolved.yaml` preserves the configuration version, evaluation name,
 profile, ordered target/gate/metric selections, repetitions, concurrency and
-faults. Defaults are made explicit. An empty `metrics: []` disables optional
+faults, `runs.warmup`, and `runs.seed`. Defaults are made explicit. An empty `metrics: []` disables optional
 metrics; omitting `metrics` selects the defaults. An empty `faults: []` injects no
 faults. Repetition and concurrency values must be positive integers. Only
-configuration version 1 is supported.
+configuration version 1 is supported. The public JSON Schema is at
+`schemas/evaluation-config-v1.json`; the core validator rejects unknown
+configuration keys and invalid structural values before target setup.
+
+Warm-up executions exercise the same workload at each configured concurrency
+level but are excluded from observations and metrics. The seed is attached to
+planned executions so an adapter can reproduce generated workload data. The
+engine schedules measured work in bounded concurrent batches rather than merely
+recording requested concurrency.
 
 The parser supports the documented YAML subset, including block lists, quoted
 strings and empty lists. It is not a general-purpose YAML parser. Exports use
@@ -79,6 +88,23 @@ Docker is not invoked or contacted; its version remains unknown in this stage.
 Host resource metadata does not measure per-execution resource usage. A matching
 fingerprint identifies recorded inputs, not identical performance or successful
 security validation.
+
+Each observation now also carries a shared-process CPU and memory snapshot. It
+is deliberately reported with `WARN` confidence because concurrent executions
+share the harness process; adapters must supply isolated/container telemetry for
+comparative resource claims. Cost is `NOT_VALIDATED` unless an adapter supplies
+a non-negative amount, ISO currency, source and effective date for every row.
+
+## Workload oracle and side-effect ledger
+
+The core exposes a workload-oracle contract for independent validation of a
+completed execution. The default structural oracle checks submitted execution
+and workload identity and rejects a successful result without observable steps.
+Its verdict is retained on the execution observation. Application workloads can
+use `SideEffectLedger` to record idempotency keys and payload digests outside a
+provider's completion report; reused keys with different payloads are rejected.
+This is a correctness boundary, not proof that every provider has supplied the
+required side-effect evidence.
 
 Run `orcheval doctor [target]` before a live evaluation to inspect a target's mode,
 version, capabilities and health. A `SIMULATED` result confirms that no live runner

@@ -26,8 +26,14 @@ metrics:
     enabled: true
   traceability:
     enabled: true
+  resources:
+    enabled: true
+  cost:
+    enabled: true
 runs:
   repetitions: 3
+  warmup: 1
+  seed: 20261007
 load:
   concurrency:
     - 1
@@ -96,6 +102,8 @@ export function parseSimpleYamlConfig(content: string): EvaluationConfig {
     const value = unquote(rawValue);
     if (section === 'profile' && key === 'id') config.profileId = value;
     else if (section === 'runs' && key === 'repetitions') config.repetitions = Number(value);
+    else if (section === 'runs' && key === 'warmup') config.warmup = Number(value);
+    else if (section === 'runs' && key === 'seed') config.seed = Number(value);
     else if (section === 'gates' && indent === 2 && rawValue === '') (config.gates ??= []).push(key);
     else if (section === 'metrics' && indent === 2 && rawValue === '') activeList = `metric:${key}`;
     else if (section === 'metrics' && indent >= 4 && key === 'enabled' && value === 'true' && activeList.startsWith('metric:')) (config.metrics ??= []).push(activeList.slice(7));

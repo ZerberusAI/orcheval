@@ -65,4 +65,7 @@ test('invalid versions and numeric settings are rejected before an evaluation', 
   }
   assert.match(validateConfig({ ...base, concurrency: [] }).join(' '), /positive integer/);
   assert.match(validateConfig({ ...base, targets: ['temporal', 'temporal'] }).join(' '), /Duplicate targets/);
+  assert.match(validateConfig({ ...base, unexpected: true } as never).join(' '), /Unknown configuration property/);
+  assert.match(validateConfig({ ...base, seed: 1.5 }).join(' '), /Seed must be a safe integer/);
+  assert.match(validateConfig({ ...base, warmup: -1 }).join(' '), /Warmup must be a non-negative integer/);
 });

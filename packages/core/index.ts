@@ -4,6 +4,10 @@ import { randomUUID } from 'node:crypto';
 
 import { captureFrameworkIdentity, captureHostEnvironment, contentHash, type ReproductionManifest } from './reproducibility.ts';
 import { completeExecution } from './lifecycle.ts';
+import { schemaErrors } from './schema.ts';
+import type { WorkloadOracle } from './oracle.ts';
+import { captureProcessResources, resourceDelta, type ProcessResourceSample } from '../instrumentation/resource.ts';
+import type { CostEvidence } from '../instrumentation/cost.ts';
 
 /** Candidate-neutral contracts used by profiles, targets and plugins. */
 export type GateStatus = 'PASS' | 'FAIL' | 'NOT_VALIDATED';
@@ -13,17 +17,17 @@ export type LifecycleAction = { action: 'signal'; at: 'WAITING'; signal: Evaluat
 export interface LifecycleEvent { action: 'observe' | 'signal' | 'cancel'; timestamp: string; outcome: ExecutionOutcome; signal?: EvaluationSignal; }
 export interface TargetCallOptions { signal: AbortSignal; }
 
-export interface EvaluationConfig { version?: number; name?: string; profileId?: string; targets?: string[]; gates?: string[]; metrics?: string[]; repetitions?: number; concurrency?: number[]; faults?: string[]; outputDir?: string; }
+export interface EvaluationConfig { version?: number; name?: string; profileId?: string; targets?: string[]; gates?: string[]; metrics?: string[]; repetitions?: number; warmup?: number; seed?: number; concurrency?: number[]; faults?: string[]; outputDir?: string; }
 export type ResolvedEvaluationConfig = Required<Omit<EvaluationConfig, 'outputDir'>>;
 export interface EvaluationContext { evaluationId: string; runId: string; profileId: string; targetId: string; }
 export interface TargetMetadata { id: string; displayName: string; version: string; mode: 'SIMULATED' | 'LIVE'; capabilities: string[]; adapterVersion?: string; sdkVersions?: Record<string, string>; containerImageDigests?: string[]; }
 export interface HealthResult { healthy: boolean; details: string[]; }
 export interface WorkloadDefinition { id: string; description: string; required: boolean; kind: string; lifecycle?: LifecycleAction; timeoutMs?: number; pollIntervalMs?: number; }
-export interface EvaluationExecution { id: string; tenantId: string; correlationId: string; faults: string[]; cancellationRequested?: boolean; }
+export interface EvaluationExecution { id: string; tenantId: string; correlationId: string; faults: string[]; seed?: number; concurrency?: number; warmup?: boolean; cancellationRequested?: boolean; }
 export interface ExecutionHandle { executionId: string; }
 export interface EvaluationSignal { name: string; payload?: unknown; }
 export interface StepObservation { id: string; startedAt: string; endedAt: string; attempt: number; outcome: ExecutionOutcome; }
-export interface ExecutionObservation { executionId: string; tenantId: string; correlationId: string; workloadId: string; startedAt: string; endedAt: string; outcome: ExecutionOutcome; steps: StepObservation[]; attempts: number; errors: string[]; duplicateSideEffects: number | null; crossTenantLeakDetected: boolean | null; secretExposureDetected: boolean | null; identitySubstitutionAllowed: boolean | null; cancellationAffectedUnrelatedWork: boolean | null; auditTrailComplete: boolean | null; recoverySkippedSteps: boolean | null; crossRunLeakDetected?: boolean | null; lifecycle?: LifecycleEvent[]; runtimeEvidence?: unknown; }
+export interface ExecutionObservation { executionId: string; tenantId: string; correlationId: string; workloadId: string; startedAt: string; endedAt: string; outcome: ExecutionOutcome; steps: StepObservation[]; attempts: number; errors: string[]; duplicateSideEffects: number | null; crossTenantLeakDetected: boolean | null; secretExposureDetected: boolean | null; identitySubstitutionAllowed: boolean | null; cancellationAffectedUnrelatedWork: boolean | null; auditTrailComplete: boolean | null; recoverySkippedSteps: boolean | null; crossRunLeakDetected?: boolean | null; concurrency?: number; seed?: number; lifecycle?: LifecycleEvent[]; runtimeEvidence?: unknown; output?: unknown; oracle?: { id: string; version: string; passed: boolean; details: string[] }; resources?: ProcessResourceSample; cost?: CostEvidence; }
 /** Pending snapshots have no end time; only validated terminal observations enter results. */
 export type ExecutionSnapshot = Omit<ExecutionObservation, 'endedAt'> & { endedAt: string | null; observedAt?: string; };
 
@@ -49,11 +53,11 @@ export interface MetricPlugin { id: string; version?: string; requirements(): st
 export interface WorkloadProfile { id: string; version: string; scenarios: WorkloadDefinition[]; }
 export interface EvaluationSummary { status: 'PASS' | 'FAIL' | 'INCOMPLETE'; eligible: boolean; message: string; }
 export interface EvaluationRunResult { profileId: string; summary: EvaluationSummary; gates: GateResult[]; metrics: MetricResult[]; evidence: EvaluationEvidence; }
-export interface EngineDependencies { profiles: WorkloadProfile[]; targets: EvaluationTarget[]; gates: EvaluationGate[]; metrics: MetricPlugin[]; }
+export interface EngineDependencies { profiles: WorkloadProfile[]; targets: EvaluationTarget[]; gates: EvaluationGate[]; metrics: MetricPlugin[]; oracle?: WorkloadOracle; }
 
 export const DEFAULT_PROFILE_ID = 'ai-orchestration';
 export const DEFAULT_GATES = ['security-baseline'];
-export const DEFAULT_METRICS = ['latency', 'throughput', 'burst', 'traceability'];
+export const DEFAULT_METRICS = ['latency', 'throughput', 'burst', 'traceability', 'resources', 'cost'];
 
 export function resolveConfig(config: EvaluationConfig): ResolvedEvaluationConfig {
   return {
@@ -64,18 +68,22 @@ export function resolveConfig(config: EvaluationConfig): ResolvedEvaluationConfi
     gates: [...(config.gates ?? DEFAULT_GATES)],
     metrics: [...(config.metrics ?? DEFAULT_METRICS)],
     repetitions: config.repetitions ?? 1,
+    warmup: config.warmup ?? 0,
+    seed: config.seed ?? 20261007,
     concurrency: [...(config.concurrency ?? [1])],
     faults: [...(config.faults ?? [])],
   };
 }
 
 export function validateConfig(config: EvaluationConfig, dependencies?: EngineDependencies): string[] {
-  const errors: string[] = [];
+  const errors: string[] = schemaErrors(config);
   if ((config.version ?? 1) !== 1) errors.push('Only configuration version 1 is supported.');
   if (!config.profileId?.trim()) errors.push('Profile id is required.');
   if (!config.targets?.length) errors.push('At least one target is required.');
   if (!config.gates?.length) errors.push('At least one gate is required.');
   if (!Number.isSafeInteger(config.repetitions ?? 1) || (config.repetitions ?? 1) < 1) errors.push('Repetitions must be a positive integer.');
+  if (!Number.isSafeInteger(config.warmup ?? 0) || (config.warmup ?? 0) < 0) errors.push('Warmup must be a non-negative integer.');
+  if (!Number.isSafeInteger(config.seed ?? 20261007)) errors.push('Seed must be a safe integer.');
   if (config.concurrency && (!config.concurrency.length || config.concurrency.some((value) => !Number.isSafeInteger(value) || value < 1))) errors.push('Concurrency must contain positive integers.');
   for (const key of ['targets', 'gates', 'metrics'] as const) {
     const values = config[key] ?? [];
@@ -124,7 +132,7 @@ function resolvedConfigYaml(result: EvaluationRunResult): string {
     'gates:', ...config.gates.flatMap((id) => [`  ${JSON.stringify(id)}:`, '    required: true']),
     config.metrics.length ? 'metrics:' : 'metrics: []',
     ...config.metrics.flatMap((id) => [`  ${JSON.stringify(id)}:`, '    enabled: true']),
-    'runs:', `  repetitions: ${config.repetitions}`,
+    'runs:', `  repetitions: ${config.repetitions}`, `  warmup: ${config.warmup}`, `  seed: ${config.seed}`,
     'load:', '  concurrency:', ...config.concurrency.map((value) => `    - ${value}`),
     config.faults.length ? 'faults:' : 'faults: []', ...config.faults.map((fault) => `  - ${JSON.stringify(fault)}`),
   ].join('\n') + '\n';
@@ -170,6 +178,45 @@ export class OrchevalEngine {
 
   constructor(dependencies: EngineDependencies) { this.dependencies = dependencies; }
 
+  private planExecutions(context: EvaluationContext, profile: WorkloadProfile, config: ResolvedEvaluationConfig): { workload: WorkloadDefinition; execution: EvaluationExecution }[] {
+    const planned: { workload: WorkloadDefinition; execution: EvaluationExecution }[] = [];
+    for (const scenario of profile.scenarios) for (const concurrency of config.concurrency) for (let index = 0; index < config.warmup + config.repetitions; index += 1) {
+      const warmup = index < config.warmup;
+      const repetition = warmup ? index : index - config.warmup;
+      const suffix = `${scenario.id}-c${concurrency}-${warmup ? `warmup-${index}` : repetition}`;
+      planned.push({ workload: scenario, execution: {
+        id: `${context.runId}-${suffix}`, tenantId: scenario.id === 'ORCH-03' ? ['tenant-a', 'tenant-b', 'tenant-c'][(index + config.seed) % 3] : 'tenant-a',
+        correlationId: `${context.runId}-${suffix}`, faults: config.faults, seed: config.seed + index, concurrency, warmup,
+        cancellationRequested: !scenario.lifecycle && scenario.id === 'ORCH-07',
+      }});
+    }
+    return planned;
+  }
+
+  private async runPlanned(target: EvaluationTarget, planned: { workload: WorkloadDefinition; execution: EvaluationExecution }[]): Promise<ExecutionObservation[]> {
+    const observations: ExecutionObservation[] = [];
+    const levels = [...new Set(planned.map(({ execution }) => execution.concurrency).filter((value): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value > 0))];
+    for (const concurrency of levels) {
+      const batch = planned.filter((item) => item.execution.concurrency === concurrency);
+      for (let offset = 0; offset < batch.length; offset += concurrency) {
+        const completed = await Promise.all(batch.slice(offset, offset + concurrency).map(async ({ workload, execution }) => {
+          const resources = captureProcessResources();
+          const handle = await target.execute(workload, execution);
+          const observation = await completeExecution(target, workload, execution, handle);
+          observation.concurrency = execution.concurrency;
+          observation.seed = execution.seed;
+          observation.resources = resourceDelta(resources, captureProcessResources());
+          const verdict = await this.dependencies.oracle?.evaluate(workload, execution, observation);
+          if (verdict && !verdict.passed) throw new Error(`Workload oracle rejected ${execution.id}: ${verdict.details.join(' ')}`);
+          if (verdict) observation.oracle = { id: this.dependencies.oracle!.id, version: this.dependencies.oracle!.version, ...verdict };
+          return { observation, warmup: execution.warmup };
+        }));
+        observations.push(...completed.filter(({ warmup }) => !warmup).map(({ observation }) => observation));
+      }
+    }
+    return observations;
+  }
+
   async run(config: EvaluationConfig): Promise<EvaluationRunResult> {
     const normalised = resolveConfig(config);
     const errors = validateConfig(normalised, this.dependencies);
@@ -188,13 +235,7 @@ export class OrchevalEngine {
       try {
         await target.setup(context);
         const health = await target.health();
-        const observations: ExecutionObservation[] = [];
-        if (health.healthy) for (const scenario of profile.scenarios) for (let repetition = 0; repetition < normalised.repetitions!; repetition += 1) {
-          const execution: EvaluationExecution = { id: `${context.runId}-${scenario.id}-${repetition}`, tenantId: scenario.id === 'ORCH-03' ? ['tenant-a', 'tenant-b', 'tenant-c'][repetition % 3] : 'tenant-a', correlationId: `${context.runId}-${scenario.id}-${repetition}`, faults: normalised.faults!, cancellationRequested: !scenario.lifecycle && scenario.id === 'ORCH-07' };
-          const handle = await target.execute(scenario, execution);
-          const observation = await completeExecution(target, scenario, execution, handle);
-          observations.push(observation);
-        }
+        const observations = health.healthy ? await this.runPlanned(target, this.planExecutions(context, profile, normalised)) : [];
         targetEvidence.push({ target: metadata, health, observations });
       } finally { await target.teardown(context); }
     }

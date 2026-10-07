@@ -24,11 +24,17 @@ export function observationFromResult(executionId, result, timing, runtimeEviden
 export function observationFromSnapshot(executionId, result, timing, runtimeEvidence) {
   return {
     executionId, tenantId: result.execution.tenantId, correlationId: result.execution.correlationId, workloadId: result.workloadId ?? 'ORCH-01',
-    ...timing, outcome: result.outcome, steps: result.steps, attempts: 1, errors: [],
-    // This smoke scenario does not perform the security probes. Unknown is explicit.
-    duplicateSideEffects: null, crossTenantLeakDetected: null, secretExposureDetected: null,
-    identitySubstitutionAllowed: null, cancellationAffectedUnrelatedWork: null,
-    auditTrailComplete: null, recoverySkippedSteps: null, crossRunLeakDetected: null,
+    ...timing, outcome: result.outcome, steps: result.steps, attempts: Math.max(1, ...result.steps.map((step) => step.attempt)), errors: [],
+    // A runtime result cannot substitute for the adversarial security probes. Values
+    // remain null unless a specific probe has independently established them.
+    duplicateSideEffects: result.duplicateSideEffects ?? null,
+    crossTenantLeakDetected: result.crossTenantLeakDetected ?? null,
+    secretExposureDetected: result.secretExposureDetected ?? null,
+    identitySubstitutionAllowed: result.identitySubstitutionAllowed ?? null,
+    cancellationAffectedUnrelatedWork: result.cancellationAffectedUnrelatedWork ?? null,
+    auditTrailComplete: result.auditTrailComplete ?? null,
+    recoverySkippedSteps: result.recoverySkippedSteps ?? null,
+    crossRunLeakDetected: result.crossRunLeakDetected ?? null,
     output: result.output, runtimeEvidence,
   };
 }

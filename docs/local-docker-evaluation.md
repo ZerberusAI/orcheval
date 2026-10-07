@@ -45,6 +45,17 @@ Docker must already be running. From this repository:
 sh infra/local-evaluation/run.sh
 ```
 
+The first full reference-workload run is intentionally separate from the smoke
+lab. It executes all ten core-v1 scenarios on Temporal and retains an incomplete
+security result until the dedicated probes exist:
+
+```bash
+sh infra/local-evaluation/run-temporal-core-v1.sh
+```
+
+See [the core-v1 reference workload](core-v1-reference.md) for its precise
+coverage and non-claims.
+
 The helper refuses to start if any containers from this lab already exist.
 It builds the SDK image, starts both runtimes and workers, waits for readiness,
 checks outputs and writes two evaluation bundles. Its cleanup trap also runs if

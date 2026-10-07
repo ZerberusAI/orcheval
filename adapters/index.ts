@@ -1,4 +1,4 @@
-import type { EvaluationContext, EvaluationExecution, EvaluationSignal, EvaluationTarget, ExecutionHandle, ExecutionObservation, HealthResult, TargetMetadata, WorkloadDefinition } from '../packages/core/index.ts';
+import type { EvaluationContext, EvaluationExecution, EvaluationSignal, EvaluationTarget, ExecutionHandle, ExecutionSnapshot, HealthResult, TargetMetadata, WorkloadDefinition } from '../packages/core/index.ts';
 import { liveRunnerFor, RunnerTarget } from './runner-target.ts';
 
 const WORKFLOW_STEPS: Record<string, string[]> = {
@@ -7,15 +7,15 @@ const WORKFLOW_STEPS: Record<string, string[]> = {
   'tenant-burst': ['queue', 'worker', 'result'],
   'retry-idempotency': ['consequential-operation', 'retry-verification'],
   'worker-failure': ['work', 'recovery', 'validation'],
-  'approval-resume': ['start', 'approval', 'resume'],
-  cancellation: ['queue', 'cancel'],
+  'approval-resume': ['request', 'policy', 'approval', 'fulfil', 'audit'],
+  cancellation: ['queue', 'dispatch', 'wait'],
   load: ['queue', 'work', 'result'],
   context: ['context', 'model', 'validation'],
   'version-change': ['wait', 'version-check', 'resume'],
 };
 
 class SimulatedOrchestrationTarget implements EvaluationTarget {
-  private readonly executions = new Map<string, ExecutionObservation>();
+  private readonly executions = new Map<string, ExecutionSnapshot>();
   readonly id: string;
   private readonly displayName: string;
 
@@ -33,13 +33,16 @@ class SimulatedOrchestrationTarget implements EvaluationTarget {
     const injectedTransientFailure = execution.faults.includes('transient_failure') && workload.id === 'ORCH-04';
     const injectedWorkerFailure = execution.faults.includes('worker_kill') && workload.id === 'ORCH-05';
     const outcome = execution.cancellationRequested ? 'CANCELLED' : 'SUCCEEDED';
-    const steps = (WORKFLOW_STEPS[workload.kind] ?? ['execute']).map((id, index) => {
+    const allSteps = (WORKFLOW_STEPS[workload.kind] ?? ['execute']).map((id, index) => {
       const timestamp = new Date(Date.parse(startedAt) + index).toISOString();
       return { id, startedAt: timestamp, endedAt: timestamp, attempt: injectedTransientFailure && index === 0 ? 2 : 1, outcome: outcome as 'SUCCEEDED' | 'CANCELLED' };
     });
+    const waiting = Boolean(workload.lifecycle);
+    const steps = waiting ? allSteps.slice(0, workload.id === 'ORCH-06' ? 2 : 2) : allSteps;
+    const now = steps.at(-1)?.endedAt ?? startedAt;
     this.executions.set(execution.id, {
       executionId: execution.id, tenantId: execution.tenantId, correlationId: execution.correlationId, workloadId: workload.id,
-      startedAt, endedAt: steps.at(-1)?.endedAt ?? startedAt, outcome: outcome as 'SUCCEEDED' | 'CANCELLED', steps,
+      startedAt, endedAt: waiting ? null : now, observedAt: waiting ? now : undefined, outcome: waiting ? 'WAITING' : outcome as 'SUCCEEDED' | 'CANCELLED', steps,
       attempts: injectedTransientFailure ? 2 : 1, errors: injectedWorkerFailure ? ['Injected worker failure recovered.'] : [],
       duplicateSideEffects: 0, crossTenantLeakDetected: false, secretExposureDetected: false, identitySubstitutionAllowed: false,
       cancellationAffectedUnrelatedWork: false, auditTrailComplete: true, recoverySkippedSteps: false, crossRunLeakDetected: false,
@@ -47,12 +50,25 @@ class SimulatedOrchestrationTarget implements EvaluationTarget {
     return { executionId: execution.id };
   }
 
-  async signal(_executionId: string, _signal: EvaluationSignal): Promise<void> {}
+  async signal(executionId: string, signal: EvaluationSignal): Promise<void> {
+    const observation = this.executions.get(executionId);
+    if (!observation || observation.outcome !== 'WAITING' || signal.name !== 'approve') return;
+    const remaining = (WORKFLOW_STEPS['approval-resume'] ?? []).slice(observation.steps.length);
+    const start = Math.max(Date.now(), Date.parse(observation.steps.at(-1)?.endedAt ?? '') + 1);
+    observation.steps.push(...remaining.map((id, index) => ({ id, startedAt: new Date(start + index).toISOString(), endedAt: new Date(start + index).toISOString(), attempt: 1, outcome: 'SUCCEEDED' as const })));
+    observation.endedAt = observation.steps.at(-1)?.endedAt ?? new Date().toISOString();
+    observation.outcome = 'SUCCEEDED';
+    delete observation.observedAt;
+  }
   async cancel(executionId: string): Promise<void> {
     const observation = this.executions.get(executionId);
-    if (observation) observation.outcome = 'CANCELLED';
+    if (observation) {
+      observation.outcome = 'CANCELLED';
+      observation.endedAt = new Date(Math.max(Date.now(), Date.parse(observation.steps.at(-1)?.endedAt ?? '') + 1)).toISOString();
+      delete observation.observedAt;
+    }
   }
-  async observe(executionId: string): Promise<ExecutionObservation> {
+  async observe(executionId: string): Promise<ExecutionSnapshot> {
     const observation = this.executions.get(executionId);
     if (!observation) throw new Error(`Unknown execution: ${executionId}`);
     return structuredClone(observation);

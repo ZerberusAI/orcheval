@@ -1,17 +1,13 @@
 version: 1
 
 evaluation:
-  name: orchestration-runtime-evaluation
+  name: temporal-core-v1-reference
 
 profile:
   id: ai-orchestration
 
 targets:
   - temporal
-  - hatchet
-  - inngest
-  - triggerdev
-  - windmill
 
 gates:
   security-baseline:
@@ -39,8 +35,7 @@ runs:
 load:
   concurrency:
     - 1
-    - 10
-    - 50
+    - 5
 
 faults:
   - transient_failure

@@ -22,6 +22,8 @@ const config: EvaluationConfig = {
   gates: ['security-baseline'],
   metrics: ['traceability', 'latency', 'throughput'],
   repetitions: 3,
+  warmup: 0,
+  seed: 20261007,
   concurrency: [1, 10, 50],
   faults: ['transient_failure', 'worker_kill'],
 };
@@ -62,7 +64,7 @@ test('replay preserves defaults, empty faults, and explicitly disabled metrics',
     assert.deepEqual(resolved.faults, []);
     const replay = await createPhaseOneEngine().run(resolved);
     assert.equal(replay.evidence.fingerprint, result.evidence.fingerprint);
-    assert.equal(replay.metrics.length, metrics === undefined ? 4 : 0);
+    assert.equal(replay.metrics.length, metrics === undefined ? 6 : 0);
   }
 });
 

@@ -24,7 +24,8 @@ export const securityBaselineGate: EvaluationGate = {
       return { id, description, failed: checks.some((value) => value === false), validated: checks.length > 0 && checks.every((value) => value === true) };
     });
     const allLive = evidence.targets.length > 0 && evidence.targets.every(({ target }) => target.mode === 'LIVE');
-    const completeCoverage = evidence.targets.length > 0 && evidence.targets.every((target) => target.health.healthy && evidence.manifest.profile.scenarios.filter((scenario) => scenario.required).every((scenario) => target.observations.filter((observation) => observation.workloadId === scenario.id).length === evidence.config.repetitions));
+    const expectedPerScenario = evidence.config.repetitions * evidence.config.concurrency.length;
+    const completeCoverage = evidence.targets.length > 0 && evidence.targets.every((target) => target.health.healthy && evidence.manifest.profile.scenarios.filter((scenario) => scenario.required).every((scenario) => target.observations.filter((observation) => observation.workloadId === scenario.id).length === expectedPerScenario));
     const status = assertions.some((assertion) => assertion.failed) ? 'FAIL' : allLive && completeCoverage && assertions.every((assertion) => assertion.validated) ? 'PASS' : 'NOT_VALIDATED';
     return {
       id: 'security-baseline', mandatory: true, status,

@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "name": "five-dimension-baseline",
+  "adapters": ["./adapters/simple/windmill.ts"],
+  "weights": { "reliability": 5, "security": 4, "performance": 3, "cost": 2, "governance": 1 },
+  "outputDir": "./results/simple"
+}

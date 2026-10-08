@@ -1,0 +1,53 @@
+name: orcheval-aiservices-baseline
+
+services:
+  mongo:
+    image: mongo:7.0
+    init: true
+    cpus: 1.0
+    mem_limit: 1024m
+    tmpfs:
+      - /data/db
+    networks: [evaluation]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ping:1}).ok"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+    init: true
+    cpus: 0.5
+    mem_limit: 256m
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    networks: [evaluation]
+
+  aiservices:
+    image: orcheval-aiservices:${AISERVICES_EVAL_REVISION}
+    build:
+      context: ${AISERVICES_EVAL_SOURCE}
+      dockerfile: ${ORCHEVAL_ROOT}/infra/aiservices-evaluation/Dockerfile
+    init: true
+    cpus: 2.0
+    mem_limit: 2048m
+    environment:
+      PORT: "3000"
+      ENV: local
+      MONGODB_URI: mongodb://mongo:27017/aiservices_eval
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      SESSION_KEYS: evaluation-only-session-key-1,evaluation-only-session-key-2
+      JWT_SECRET: evaluation-only-jwt-secret-not-for-production
+      ALLOWED_HOSTS: http://allowed.test
+      LOG_LEVEL: warn
+    networks: [evaluation]
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+networks:
+  evaluation:
+    internal: true

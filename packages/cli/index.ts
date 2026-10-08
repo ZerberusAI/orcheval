@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 
 import { validateConfig, writeEvaluationBundle, type EvaluationConfig } from '../core/index.ts';
 import { createPhaseOneEngine, phaseOneDependencies } from '../harness/index.ts';
+import { runSimpleFile } from '../simple/index.ts';
 
 const TEMPLATE = `version: 1
 evaluation:
@@ -122,6 +123,7 @@ function usage(): string { return 'Usage: orcheval <init [evaluation.yaml]|list 
 
 export async function runCli(args: string[]): Promise<void> {
   const [command, ...rest] = args;
+  if (command === 'simple-run') { const file = rest[0]; if (!file) throw new Error('Usage: orcheval simple-run <evaluation.json>'); console.log(`Result: ${await runSimpleFile(file)}`); return; }
   if (command === 'init') {
     const path = rest[0] ?? 'evaluation.yaml';
     try { await access(path); throw new Error(`${path} already exists; refusing to overwrite it.`); }

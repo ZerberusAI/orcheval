@@ -11,9 +11,9 @@ const victim = execution('victim');
 const control = execution('control');
 
 async function request(path, options = {}) { return fetch(new URL(path, base), { ...options, signal: AbortSignal.timeout(10_000), headers: { 'content-type': 'application/json', ...(options.headers ?? {}) } }); }
-for (let attempt = 0; attempt < 50; attempt += 1) {
+for (let attempt = 0; attempt < 300; attempt += 1) {
   try { const health = await request('/health'); if (health.ok) break; } catch { /* service is still starting */ }
-  if (attempt === 49) throw new Error('Service did not become healthy within 10 seconds.');
+  if (attempt === 299) throw new Error('Service did not become healthy within 60 seconds.');
   await delay(200);
 }
 async function observe(id) {
